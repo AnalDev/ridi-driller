@@ -1,0 +1,137 @@
+import type { Recommendation } from "./ridi/types";
+
+export type TriState = "all" | "only" | "exclude";
+
+export type SortKey =
+  | "score"
+  | "publishDate"
+  | "missing"
+  | "owned"
+  | "lastReadAt"
+  | "lastReadVolume"
+  | "rating"
+  | "purchaseDate"
+  | "title";
+
+export interface ViewState {
+  search: string;
+  adult: TriState;
+  completed: TriState;
+  hideMagazine: boolean;
+  types: string[]; // empty = all
+  categories: string[]; // empty = all
+  tags: string[]; // empty = all
+  minRating: number; // 0..5 (0.1 step)
+  sortKey: SortKey;
+  sortDir: "asc" | "desc";
+}
+
+export const defaultView = (): ViewState => ({
+  search: "",
+  adult: "all",
+  completed: "all",
+  hideMagazine: false,
+  types: [],
+  categories: [],
+  tags: [],
+  minRating: 0,
+  sortKey: "score",
+  sortDir: "desc",
+});
+
+const time = (s?: string | null) => (s ? Date.parse(s) || 0 : 0);
+
+function matchTri(state: TriState, flag: boolean): boolean {
+  if (state === "only") return flag;
+  if (state === "exclude") return !flag;
+  return true;
+}
+
+export function applyFilters(list: Recommendation[], v: ViewState): Recommendation[] {
+  const q = v.search.trim().toLowerCase();
+  return list.filter((r) => {
+    if (!matchTri(v.adult, r.isAdult)) return false;
+    if (!matchTri(v.completed, r.isCompleted)) return false;
+    if (v.hideMagazine && r.isMagazine) return false;
+    if (v.types.length && !v.types.includes(r.contentType)) return false;
+    if (v.categories.length && !(r.categoryName && v.categories.includes(r.categoryName)))
+      return false;
+    if (v.tags.length && !v.tags.some((t) => r.tags.includes(t))) return false;
+    if (v.minRating > 0 && (r.rating ?? 0) < v.minRating) return false;
+    if (q) {
+      const hay = (r.title + " " + r.authors.join(" ")).toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function sortValue(r: Recommendation, key: SortKey): number | string {
+  switch (key) {
+    case "publishDate":
+      return time(r.publishDate);
+    case "missing":
+      return r.missing ?? 0;
+    case "owned":
+      return r.ownedCount ?? 0;
+    case "lastReadAt":
+      return time(r.lastReadAt);
+    case "lastReadVolume":
+      return r.lastReadVolume ?? 0;
+    case "rating":
+      return r.rating ?? 0;
+    case "purchaseDate":
+      return time(r.purchaseDate);
+    case "title":
+      return r.title;
+    default:
+      return r.score;
+  }
+}
+
+export function applySort(list: Recommendation[], v: ViewState): Recommendation[] {
+  const dir = v.sortDir === "asc" ? 1 : -1;
+  return [...list].sort((a, b) => {
+    const av = sortValue(a, v.sortKey);
+    const bv = sortValue(b, v.sortKey);
+    if (typeof av === "string" || typeof bv === "string") {
+      return String(av).localeCompare(String(bv), "ko") * dir;
+    }
+    return (av - bv) * dir;
+  });
+}
+
+export function applyView(list: Recommendation[], v: ViewState): Recommendation[] {
+  return applySort(applyFilters(list, v), v);
+}
+
+/** distinct facet values present in a list, for populating filter menus */
+export function facets(list: Recommendation[]) {
+  const types = new Map<string, number>();
+  const categories = new Map<string, number>();
+  const tags = new Map<string, number>();
+  for (const r of list) {
+    types.set(r.contentType, (types.get(r.contentType) ?? 0) + 1);
+    if (r.categoryName) categories.set(r.categoryName, (categories.get(r.categoryName) ?? 0) + 1);
+    for (const t of r.tags) tags.set(t, (tags.get(t) ?? 0) + 1);
+  }
+  const sortByCount = (m: Map<string, number>) =>
+    [...m.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => ({ value: k, count: n }));
+  return {
+    types: sortByCount(types),
+    categories: sortByCount(categories),
+    tags: sortByCount(tags),
+  };
+}
+
+export const SORT_OPTIONS: { key: SortKey; label: string; tabs?: string[] }[] = [
+  { key: "score", label: "추천순" },
+  { key: "publishDate", label: "발매일" },
+  { key: "rating", label: "별점" },
+  { key: "missing", label: "미보유 권수", tabs: ["newVolume"] },
+  { key: "owned", label: "보유 권수" },
+  { key: "lastReadVolume", label: "읽은 권수", tabs: ["unread"] },
+  { key: "lastReadAt", label: "최종 읽은 시각", tabs: ["unread"] },
+  { key: "purchaseDate", label: "구매일" },
+  { key: "title", label: "제목" },
+];
