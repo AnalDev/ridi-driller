@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSessionId } from "@/lib/session";
+import { getUserKey } from "@/lib/session";
 import { readJson, writeJson } from "@/lib/cache";
 import { buildNewReleases, type NewReleaseResult } from "@/lib/ridi/newReleases";
 
@@ -9,7 +9,7 @@ export const maxDuration = 120;
 const TTL = 1000 * 60 * 30; // 30 min cache
 
 export async function GET(req: Request) {
-  const sid = await getSessionId();
+  const sid = await getUserKey();
   if (!sid) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const url = new URL(req.url);

@@ -1,4 +1,4 @@
-import { getSessionId } from "@/lib/session";
+import { getUserKey } from "@/lib/session";
 import { readJson } from "@/lib/cache";
 import type { Snapshot } from "@/lib/ridi/sync";
 import type { Recommendation, RecKind } from "@/lib/ridi/types";
@@ -43,7 +43,7 @@ function toRow(r: Recommendation): string {
 }
 
 export async function GET(req: Request) {
-  const sid = await getSessionId();
+  const sid = await getUserKey();
   if (!sid) return new Response("unauthorized", { status: 401 });
   const snap = await readJson<Snapshot>(`snapshots/${sid}.json`);
   if (!snap) return new Response("no data", { status: 404 });

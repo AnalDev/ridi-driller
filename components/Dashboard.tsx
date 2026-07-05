@@ -93,12 +93,14 @@ export default function Dashboard({
     const es = new EventSource(url);
     esRef.current = es;
     es.addEventListener("progress", (e) => {
-      const p = JSON.parse((e as MessageEvent).data) as SyncProgress;
-      setProgress(p);
-      if (p.done === 1 && p.total === 1) loadSnapshot();
+      setProgress(JSON.parse((e as MessageEvent).data) as SyncProgress);
+    });
+    // server streams each partial + final snapshot (works even when the server
+    // can't persist, e.g. Vercel read-only FS) — store it locally
+    es.addEventListener("snapshot", (e) => {
+      applySnapshot(JSON.parse((e as MessageEvent).data) as Snapshot);
     });
     es.addEventListener("done", () => {
-      loadSnapshot();
       setSyncing(false);
       setProgress(null);
       es.close();

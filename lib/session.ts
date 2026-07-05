@@ -1,97 +1,71 @@
 import crypto from "crypto";
-import { promises as fs } from "fs";
-import path from "path";
 import { cookies } from "next/headers";
-import { DATA_DIR, readJson, writeJson, removeFile } from "./cache";
 import type { RidiCreds } from "./ridi/types";
 
-export const SESSION_COOKIE = "rd_sid";
+// Session state lives entirely in an httpOnly cookie (no filesystem), so it
+// works on read-only serverless hosts (Vercel) as well as locally.
+// The creds are encrypted with RD_SECRET when set; otherwise stored as plain
+// base64 (still httpOnly + secure, same threat model as RIDI's own cookies).
+export const SESSION_COOKIE = "rd_sess";
 
-// ---- encryption key (persisted so restarts can still decrypt) ----
-let cachedKey: Buffer | null = null;
-async function getKey(): Promise<Buffer> {
-  if (cachedKey) return cachedKey;
-  if (process.env.RD_SECRET) {
-    cachedKey = crypto.createHash("sha256").update(process.env.RD_SECRET).digest();
-    return cachedKey;
-  }
-  const keyPath = path.join(DATA_DIR, ".key");
-  try {
-    cachedKey = Buffer.from(await fs.readFile(keyPath, "utf8"), "hex");
-  } catch {
-    cachedKey = crypto.randomBytes(32);
-    await fs.mkdir(DATA_DIR, { recursive: true });
-    await fs.writeFile(keyPath, cachedKey.toString("hex"), "utf8");
-  }
-  return cachedKey;
+function key(): Buffer | null {
+  const secret = process.env.RD_SECRET;
+  return secret ? crypto.createHash("sha256").update(secret).digest() : null;
 }
 
-async function encrypt(plain: string): Promise<string> {
-  const key = await getKey();
+export function encodeCreds(creds: RidiCreds): string {
+  const json = JSON.stringify(creds);
+  const k = key();
+  if (!k) return "p." + Buffer.from(json, "utf8").toString("base64url");
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
-  const enc = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
+  const cipher = crypto.createCipheriv("aes-256-gcm", k, iv);
+  const enc = Buffer.concat([cipher.update(json, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
-  return [iv.toString("hex"), tag.toString("hex"), enc.toString("hex")].join(".");
+  return "e." + Buffer.concat([iv, tag, enc]).toString("base64url");
 }
 
-async function decrypt(blob: string): Promise<string | null> {
+export function decodeCreds(value: string): RidiCreds | null {
   try {
-    const key = await getKey();
-    const [ivHex, tagHex, dataHex] = blob.split(".");
-    const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(ivHex, "hex"));
-    decipher.setAuthTag(Buffer.from(tagHex, "hex"));
-    return Buffer.concat([
-      decipher.update(Buffer.from(dataHex, "hex")),
-      decipher.final(),
-    ]).toString("utf8");
+    const [kind, data] = [value.slice(0, 2), value.slice(2)];
+    if (kind === "p.") {
+      return JSON.parse(Buffer.from(data, "base64url").toString("utf8"));
+    }
+    if (kind === "e.") {
+      const k = key();
+      if (!k) return null;
+      const buf = Buffer.from(data, "base64url");
+      const iv = buf.subarray(0, 12);
+      const tag = buf.subarray(12, 28);
+      const ct = buf.subarray(28);
+      const decipher = crypto.createDecipheriv("aes-256-gcm", k, iv);
+      decipher.setAuthTag(tag);
+      const dec = Buffer.concat([decipher.update(ct), decipher.final()]);
+      return JSON.parse(dec.toString("utf8"));
+    }
+    return null;
   } catch {
     return null;
   }
 }
 
-interface StoredSession {
-  creds: string; // encrypted JSON of RidiCreds
-  createdAt: number;
-}
-
-/** Create a session file with encrypted creds; returns the session id. */
-export async function createSession(creds: RidiCreds): Promise<string> {
-  const sid = crypto.randomUUID();
-  const stored: StoredSession = {
-    creds: await encrypt(JSON.stringify(creds)),
-    createdAt: Date.now(),
-  };
-  await writeJson(`sessions/${sid}.json`, stored);
-  return sid;
-}
-
-/** Load creds for the current request's session cookie, or null. */
 export async function getSessionCreds(): Promise<RidiCreds | null> {
-  const sid = (await cookies()).get(SESSION_COOKIE)?.value;
-  if (!sid) return null;
-  const stored = await readJson<StoredSession>(`sessions/${sanitize(sid)}.json`);
-  if (!stored) return null;
-  const json = await decrypt(stored.creds);
-  if (!json) return null;
+  const v = (await cookies()).get(SESSION_COOKIE)?.value;
+  return v ? decodeCreds(v) : null;
+}
+
+/**
+ * Stable per-user key derived from the ridi-at token (u_idx / sub), used to
+ * namespace the optional local file cache. Returns null if unreadable.
+ */
+export async function getUserKey(): Promise<string | null> {
+  const creds = await getSessionCreds();
+  if (!creds) return null;
   try {
-    return JSON.parse(json) as RidiCreds;
+    const payload = creds.ridiAt.split(".")[1];
+    const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    const id = String(claims.u_idx ?? claims.sub ?? "");
+    return id ? id.replace(/[^a-zA-Z0-9_-]/g, "") : null;
   } catch {
     return null;
   }
-}
-
-export async function getSessionId(): Promise<string | null> {
-  const sid = (await cookies()).get(SESSION_COOKIE)?.value;
-  return sid ? sanitize(sid) : null;
-}
-
-export async function destroySession(): Promise<void> {
-  const sid = (await cookies()).get(SESSION_COOKIE)?.value;
-  if (sid) await removeFile(`sessions/${sanitize(sid)}.json`);
-}
-
-// prevent path traversal via the cookie value
-function sanitize(sid: string): string {
-  return sid.replace(/[^a-zA-Z0-9-]/g, "");
 }

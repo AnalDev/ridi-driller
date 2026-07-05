@@ -1,12 +1,7 @@
 import { NextResponse } from "next/server";
 import { fetchLibraryCount } from "@/lib/ridi/library";
 import { RidiAuthError } from "@/lib/ridi/client";
-import {
-  SESSION_COOKIE,
-  createSession,
-  getSessionCreds,
-  destroySession,
-} from "@/lib/session";
+import { SESSION_COOKIE, encodeCreds, getSessionCreds } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -22,7 +17,7 @@ export async function GET() {
   }
 }
 
-// Log in: validate the pasted cookie against the library count endpoint
+// Log in: validate the pasted cookie, then store creds in an httpOnly cookie
 export async function POST(req: Request) {
   let body: { ridiAt?: string; cfClearance?: string };
   try {
@@ -37,18 +32,9 @@ export async function POST(req: Request) {
   }
   const creds = { ridiAt, cfClearance: body.cfClearance?.trim() || undefined };
 
+  let count;
   try {
-    const count = await fetchLibraryCount(creds);
-    const sid = await createSession(creds);
-    const res = NextResponse.json({ ok: true, count });
-    res.cookies.set(SESSION_COOKIE, sid, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30,
-    });
-    return res;
+    count = await fetchLibraryCount(creds);
   } catch (err) {
     if (err instanceof RidiAuthError) {
       return NextResponse.json(
@@ -59,15 +45,26 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error:
-          "리디북스(Cloudflare)에 연결하지 못했습니다. Vercel 등 클라우드/데이터센터에서는 리디 Cloudflare가 서버 IP를 차단합니다 — 로컬(npm run dev)에서 실행하세요. 로컬에서도 계속 실패하면 cf_clearance 쿠키를 함께 넣어보세요.",
+          "리디북스 연결에 실패했습니다. 잠시 후 다시 시도하거나, 차단이 있으면 cf_clearance 쿠키를 함께 넣어보세요.",
       },
       { status: 502 },
     );
   }
+
+  const res = NextResponse.json({ ok: true, count });
+  // Ephemeral, httpOnly, per-browser. No maxAge → session cookie (cleared when
+  // the browser closes). The token is never stored server-side, so on a shared
+  // deployment one user's token is not accessible to any other user/device.
+  res.cookies.set(SESSION_COOKIE, encodeCreds(creds), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  });
+  return res;
 }
 
 export async function DELETE() {
-  await destroySession();
   const res = NextResponse.json({ ok: true });
   res.cookies.delete(SESSION_COOKIE);
   return res;

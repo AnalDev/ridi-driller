@@ -16,10 +16,18 @@ export async function readJson<T>(rel: string): Promise<T | null> {
   }
 }
 
-export async function writeJson(rel: string, obj: unknown): Promise<void> {
-  const full = path.join(DATA_DIR, rel);
-  await ensureDir(path.dirname(full));
-  await fs.writeFile(full, JSON.stringify(obj), "utf8");
+// Best-effort write. On read-only serverless filesystems (Vercel) this simply
+// no-ops; the client keeps state in localStorage and the sync streams results,
+// so persistence failing here is not fatal.
+export async function writeJson(rel: string, obj: unknown): Promise<boolean> {
+  try {
+    const full = path.join(DATA_DIR, rel);
+    await ensureDir(path.dirname(full));
+    await fs.writeFile(full, JSON.stringify(obj), "utf8");
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function removeFile(rel: string): Promise<void> {

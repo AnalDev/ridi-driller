@@ -85,9 +85,15 @@ export async function runSync(
   creds: RidiCreds,
   emit: (p: SyncProgress) => void,
   opts: { incremental?: boolean } = {},
+  onSnapshot?: (snap: Snapshot) => void,
 ): Promise<Snapshot> {
   const prev = opts.incremental ? await readJson<RawStore>(`raw/${sid}.json`) : null;
   const incremental = !!prev;
+  // persist locally (no-op on read-only hosts) AND stream to the client
+  const publish = async (snap: Snapshot) => {
+    await saveSnapshot(sid, snap);
+    onSnapshot?.(snap);
+  };
 
   // stage 1: library units
   emit({ phase: "library", message: "서재 목록 불러오는 중…", done: 0, total: 0 });
@@ -123,7 +129,7 @@ export async function runSync(
     partial: true,
     incremental,
   };
-  await saveSnapshot(sid, snap);
+  await publish(snap);
   emit({ phase: "enrich", message: `신권 ${recs.newVolume.length}건`, done: 1, total: 1 });
 
   // stage 3: reading history (objects with last_read_at)
@@ -160,7 +166,7 @@ export async function runSync(
     stats: statsOf(units.length, recs),
     recommendations: { ...recs, authorNew: [] },
   };
-  await saveSnapshot(sid, snap);
+  await publish(snap);
   emit({ phase: "reading", message: `미독 ${recs.unread.length}건`, done: 1, total: 1 });
 
   // stage 4: author works (new authors only in incremental mode)
@@ -221,7 +227,7 @@ export async function runSync(
     partial: false,
     incremental,
   };
-  await saveSnapshot(sid, snap);
+  await publish(snap);
   emit({ phase: "done", message: incremental ? "증분 업데이트 완료" : "완료", done: 1, total: 1 });
   return snap;
 }

@@ -4,7 +4,6 @@ import { useState } from "react";
 
 export default function Onboarding({ onDone }: { onDone: () => void }) {
   const [ridiAt, setRidiAt] = useState("");
-  const [cfClearance, setCfClearance] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [agree, setAgree] = useState(false);
@@ -17,7 +16,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
       const res = await fetch("/api/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ridiAt, cfClearance }),
+        body: JSON.stringify({ ridiAt }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "로그인 실패");
@@ -33,7 +32,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
     <div className="mx-auto max-w-2xl px-4 py-12">
       <h1 className="text-2xl font-bold text-white">리디 드릴러</h1>
       <p className="mt-3 rounded-lg border-l-2 border-emerald-500/60 bg-neutral-900/60 px-3 py-2 text-sm italic text-neutral-300">
-        “내가 리디북스 6천 권을 구매했지만, 쓰다가 화딱지 나서 만든 서비스입니다.”
+        “내가 6천 권을 구매했지만, 쓰다가 화딱지만 쳐 나서 만들었다. 좀 정신차려라 ㄹㄷㅂㅅ”
       </p>
       <p className="mt-3 text-sm text-neutral-400">
         내 리디북스 서재를 분석해 <b className="text-neutral-200">아직 안 산 신권</b>,{" "}
@@ -99,11 +98,12 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
           이 앱은 쿠키를 어떻게 처리하나요?
         </summary>
         <ul className="mt-3 list-disc space-y-1 pl-5 text-xs leading-relaxed">
-          <li>입력한 <code className="text-emerald-300">ridi-at</code>은 이 앱의 서버(내 컴퓨터에서 도는 Next.js)로만 전송됩니다.</li>
-          <li>서버에서 <b>AES-256-GCM으로 암호화</b>해 <code>data/sessions/</code>에 저장합니다. (키: <code>RD_SECRET</code> 또는 <code>data/.key</code>)</li>
-          <li>리디 API 호출 때만 복호화해 쓰고, <b>브라우저로 다시 내려보내지 않습니다.</b> 로그도 남기지 않습니다.</li>
-          <li>브라우저엔 토큰 대신 httpOnly 세션 쿠키(<code>rd_sid</code>)만 남습니다.</li>
-          <li>한계: 같은 컴퓨터에 접근 가능한 사람이 <code>data/</code>(암호화본+키)를 가져가면 복호화 가능 → <b>본인 기기 로컬 실행</b>이 전제입니다.</li>
+          <li><b className="text-neutral-200">토큰은 서버에 저장하지 않습니다.</b> 입력한 <code className="text-emerald-300">ridi-at</code>은 <b>내 브라우저의 httpOnly 세션 쿠키</b>(<code>rd_sess</code>)에만 담깁니다.</li>
+          <li>세션 쿠키라 <b>브라우저를 닫으면 사라집니다(휘발성)</b>. JS로 읽을 수 없어(httpOnly) XSS로도 탈취되지 않습니다.</li>
+          <li>서버는 매 요청에 이 쿠키로 리디 API를 호출만 하고 <b>어디에도 저장하지 않습니다.</b> 응답으로 토큰을 다시 내려보내지도, 로그로 남기지도 않습니다.</li>
+          <li>서버에 <code>RD_SECRET</code>이 설정되면 쿠키 값도 AES-256-GCM으로 추가 암호화합니다.</li>
+          <li><b className="text-neutral-200">멀티유저 배포 안전:</b> 쿠키는 브라우저별이라, 공용 배포(Vercel)라도 <b>다른 사람/다른 기기가 내 토큰에 접근할 수 없습니다.</b> 서버엔 아무 토큰도 남지 않습니다.</li>
+          <li>분석 결과(서재 데이터)는 <b>내 브라우저 localStorage</b>에만 캐시됩니다.</li>
         </ul>
       </details>
 
@@ -181,18 +181,6 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
             required
           />
         </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-neutral-300">
-            cf_clearance 쿠키 <span className="text-neutral-500">(선택 · 차단 시 함께 입력)</span>
-          </label>
-          <textarea
-            value={cfClearance}
-            onChange={(e) => setCfClearance(e.target.value)}
-            rows={2}
-            className="w-full rounded-lg border border-white/10 bg-neutral-900 p-3 font-mono text-xs text-neutral-100 outline-none focus:border-emerald-500/50"
-          />
-        </div>
-
         <label className="flex items-start gap-2 text-xs text-neutral-400">
           <input
             type="checkbox"
