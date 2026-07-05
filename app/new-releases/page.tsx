@@ -5,7 +5,7 @@ import ResultBrowser from "@/components/ResultBrowser";
 import type { Recommendation } from "@/lib/ridi/types";
 
 type Order = "RECENT" | "GENERAL";
-const cacheKey = (o: Order) => `ridi-driller-newrel-${o}`;
+const cacheKey = (o: Order) => `ridi-driller-newrel-v2-${o}`;
 
 export default function NewReleasesPage() {
   const [order, setOrder] = useState<Order>("RECENT");

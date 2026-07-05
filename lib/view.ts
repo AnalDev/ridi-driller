@@ -50,16 +50,18 @@ function matchTri(state: TriState, flag: boolean): boolean {
 export function applyFilters(list: Recommendation[], v: ViewState): Recommendation[] {
   const q = v.search.trim().toLowerCase();
   return list.filter((r) => {
-    if (!matchTri(v.adult, r.isAdult)) return false;
-    if (!matchTri(v.completed, r.isCompleted)) return false;
+    const tags = r.tags ?? [];
+    const authors = r.authors ?? [];
+    if (!matchTri(v.adult, !!r.isAdult)) return false;
+    if (!matchTri(v.completed, !!r.isCompleted)) return false;
     if (v.hideMagazine && r.isMagazine) return false;
     if (v.types.length && !v.types.includes(r.contentType)) return false;
     if (v.categories.length && !(r.categoryName && v.categories.includes(r.categoryName)))
       return false;
-    if (v.tags.length && !v.tags.some((t) => r.tags.includes(t))) return false;
+    if (v.tags.length && !v.tags.some((t) => tags.includes(t))) return false;
     if (v.minRating > 0 && (r.rating ?? 0) < v.minRating) return false;
     if (q) {
-      const hay = (r.title + " " + r.authors.join(" ")).toLowerCase();
+      const hay = (r.title + " " + authors.join(" ")).toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -111,9 +113,9 @@ export function facets(list: Recommendation[]) {
   const categories = new Map<string, number>();
   const tags = new Map<string, number>();
   for (const r of list) {
-    types.set(r.contentType, (types.get(r.contentType) ?? 0) + 1);
+    if (r.contentType) types.set(r.contentType, (types.get(r.contentType) ?? 0) + 1);
     if (r.categoryName) categories.set(r.categoryName, (categories.get(r.categoryName) ?? 0) + 1);
-    for (const t of r.tags) tags.set(t, (tags.get(t) ?? 0) + 1);
+    for (const t of r.tags ?? []) tags.set(t, (tags.get(t) ?? 0) + 1);
   }
   const sortByCount = (m: Map<string, number>) =>
     [...m.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => ({ value: k, count: n }));

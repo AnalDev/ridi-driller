@@ -23,7 +23,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "unread", label: "안 읽은 책" },
   { key: "authorNew", label: "작가 신작" },
 ];
-const CACHE_KEY = "ridi-driller-snapshot";
+const CACHE_KEY = "ridi-driller-snapshot-v2";
 
 export default function Dashboard({
   count,

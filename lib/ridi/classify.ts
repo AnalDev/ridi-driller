@@ -27,12 +27,14 @@ function topId(m: BookMeta): number | undefined {
 export function contentTypeOf(m: BookMeta): ContentType {
   if (m.property?.is_magazine) return "잡지";
   const top = topId(m);
+  // known top categories decide first; file flags are only a fallback
   if (top === 1600) return "웹툰";
   if (top === 6100) return "연재";
   if (top === 3000) return "라이트노벨";
-  if (top === 1500 || m.file?.is_comic || m.file?.is_manga) return "만화";
+  if (top === 1500) return "만화";
   if (top === 1700 || top === 1710 || top === 4200 || m.property?.is_novel) return "소설";
   if (top && top < 1500) return "일반";
+  if (m.file?.is_comic || m.file?.is_manga) return "만화";
   return "기타";
 }
 
