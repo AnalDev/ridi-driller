@@ -27,7 +27,8 @@ export async function fetchBooksMeta(
     batches.map(async (batch) => {
       const url = `${BOOK_API}/books?b_ids=${batch.join(",")}`;
       try {
-        const books = await ridiGet<BookMeta[]>(url);
+        // book metadata is public + stable → cache a day, shared across users
+        const books = await ridiGet<BookMeta[]>(url, { revalidate: 86400 });
         for (const b of books) if (b?.id) result.set(b.id, b);
       } catch {
         // tolerate a failed batch; those ids just won't be enriched

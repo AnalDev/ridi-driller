@@ -15,7 +15,8 @@ export async function searchBooks(
 ): Promise<SearchAuthorBook[]> {
   const url = `${SEARCH_API}/search?keyword=${encodeURIComponent(keyword)}&where=book&what=base&size=${size}`;
   try {
-    const res = await ridiGet<SearchResponse>(url);
+    // public search (ratings/tags) → cache 6h, shared across users
+    const res = await ridiGet<SearchResponse>(url, { revalidate: 21600 });
     return res?.books ?? [];
   } catch {
     return [];

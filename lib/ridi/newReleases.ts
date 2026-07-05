@@ -16,9 +16,10 @@ const coverUrl = (bId: string, size: "large" | "xxlarge") =>
 export async function fetchNewReleaseIds(
   order: "GENERAL" | "RECENT" = "RECENT",
 ): Promise<string[]> {
+  // public new-release listing → cache 1h, shared across users
   const res = await fetch(`${NR_URL}?order=${order}`, {
     headers: { "User-Agent": UA, Referer: "https://ridibooks.com/" },
-    cache: "no-store",
+    next: { revalidate: 3600 },
   });
   if (!res.ok) return [];
   const html = await res.text();

@@ -18,7 +18,8 @@ export async function fetchAuthorBooks(
 ): Promise<SearchAuthorBook[]> {
   const url = `${SEARCH_API}/search?keyword=${encodeURIComponent(name)}&where=book&what=base&size=60`;
   try {
-    const res = await ridiGet<SearchResponse>(url);
+    // author works are public → cache 6h, shared across users
+    const res = await ridiGet<SearchResponse>(url, { revalidate: 21600 });
     const books = res?.books ?? [];
     return books.filter((b) => {
       if (authorId && b.authors_info?.length) {

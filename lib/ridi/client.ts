@@ -43,6 +43,10 @@ export function cookieHeader(creds: RidiCreds): string {
 interface GetOpts {
   creds?: RidiCreds;
   retries?: number;
+  // Public endpoints (no creds) can be cached in Next.js/Vercel's Data Cache,
+  // which is SHARED across all users and requests — so popular books/authors/
+  // ratings are fetched from RIDI once and reused by everyone. Pass seconds.
+  revalidate?: number;
 }
 
 /**
@@ -50,7 +54,7 @@ interface GetOpts {
  * is provided. Retries transient failures; never retries auth failures.
  */
 export async function ridiGet<T>(url: string, opts: GetOpts = {}): Promise<T> {
-  const { creds, retries = 2 } = opts;
+  const { creds, retries = 2, revalidate } = opts;
   const headers: Record<string, string> = {
     "User-Agent": UA,
     Accept: "application/json, text/plain, */*",
@@ -60,10 +64,16 @@ export async function ridiGet<T>(url: string, opts: GetOpts = {}): Promise<T> {
   };
   if (creds) headers["Cookie"] = cookieHeader(creds);
 
+  // Shared Data Cache for public data; never cache user-scoped (creds) calls.
+  const init: RequestInit & { next?: { revalidate: number } } =
+    !creds && revalidate != null
+      ? { headers, next: { revalidate } }
+      : { headers, cache: "no-store" };
+
   let lastErr: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const res = await schedule(() => fetch(url, { headers, cache: "no-store" }));
+      const res = await schedule(() => fetch(url, init));
       if (res.status === 401 || res.status === 403) {
         throw new RidiAuthError(res.status);
       }
