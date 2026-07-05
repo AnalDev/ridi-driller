@@ -2,6 +2,29 @@
 
 import { useState } from "react";
 
+// Accept either the raw ridi-at value, or a cookie JSON export (Cookie-Editor /
+// EditThisCookie format: array of {name,value}), or a {"ridi-at": "..."} object.
+function extractRidiAt(input: string): string | null {
+  const t = input.trim();
+  if (!t) return null;
+  if (t.startsWith("[") || t.startsWith("{")) {
+    try {
+      const data = JSON.parse(t);
+      const list: { name?: string; value?: string }[] = Array.isArray(data)
+        ? data
+        : Array.isArray(data.cookies)
+          ? data.cookies
+          : Object.entries(data).map(([name, value]) => ({ name, value: String(value) }));
+      const hit = list.find((c) => c.name === "ridi-at")?.value;
+      return hit?.trim() || null;
+    } catch {
+      return null;
+    }
+  }
+  // raw token (a ridi-at JWT has 3 dot-separated segments)
+  return t;
+}
+
 export default function Onboarding({ onDone }: { onDone: () => void }) {
   const [ridiAt, setRidiAt] = useState("");
   const [loading, setLoading] = useState(false);
@@ -10,13 +33,18 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    const token = extractRidiAt(ridiAt);
+    if (!token) {
+      setError("ridi-at 값을 찾지 못했습니다. 토큰 원문 또는 ridi-at이 포함된 쿠키 JSON을 붙여넣으세요.");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ridiAt }),
+        body: JSON.stringify({ ridiAt: token }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "로그인 실패");
@@ -122,15 +150,35 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
             </ol>
           </div>
           <div>
-            <p className="font-medium text-neutral-200">방법 B — 쿠키 추출 확장프로그램</p>
+            <p className="font-medium text-neutral-200">방법 B — 쿠키 추출 확장프로그램 (JSON 내보내기 지원)</p>
             <p className="mt-1">
-              확장은 편하지만 <b>그 자체가 쿠키를 훔칠 권한</b>을 가집니다. 평판 좋은 것만 쓰고, 끝나면 제거하세요.
+              확장에서 ridibooks.com 쿠키를 <b>Export/JSON</b>으로 내보내 위 입력창에 붙여넣으면 됩니다. 확장은{" "}
+              <b>그 자체가 쿠키를 훔칠 권한</b>을 가지니 평판 좋은 것만 쓰고, 끝나면 제거하세요.
             </p>
             <ul className="mt-1 list-disc space-y-0.5 pl-5">
-              <li><b>Cookie-Editor</b> (Chrome/Edge/Firefox) — 널리 쓰이고 관리 활발. 권장.</li>
+              <li>
+                <a
+                  href="https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-emerald-300 underline"
+                >
+                  Cookie-Editor (Chrome/Edge)
+                </a>{" "}
+                ·{" "}
+                <a
+                  href="https://addons.mozilla.org/firefox/addon/cookie-editor/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-emerald-300 underline"
+                >
+                  Firefox
+                </a>{" "}
+                — 널리 쓰이고 관리 활발. 권장.
+              </li>
               <li>EditThisCookie — 유명하지만 관리가 뜸하고 사칭 클론 많음 → 개발자/리뷰 확인 필수.</li>
             </ul>
-            <p className="mt-1 text-neutral-500">잘 모르겠으면 방법 A(개발자도구)를 쓰세요.</p>
+            <p className="mt-1 text-neutral-500">잘 모르겠으면 방법 A(개발자도구)를 쓰세요. 곧 나올 데스크톱 앱은 로그인만 하면 자동으로 가져옵니다.</p>
           </div>
         </div>
       </details>
@@ -169,16 +217,20 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
       <form onSubmit={submit} className="mt-6 space-y-4">
         <div>
           <label className="mb-1 block text-sm font-medium text-neutral-300">
-            ridi-at 쿠키 <span className="text-red-400">*</span>
+            ridi-at 쿠키 <span className="text-red-400">*</span>{" "}
+            <span className="text-neutral-500">(토큰 원문 또는 쿠키 JSON 붙여넣기)</span>
           </label>
           <textarea
             value={ridiAt}
             onChange={(e) => setRidiAt(e.target.value)}
-            placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6..."
+            placeholder={'eyJhbGciOiJSUzI1NiIs...  또는  [{"name":"ridi-at","value":"..."}]'}
             rows={3}
             className="w-full rounded-lg border border-white/10 bg-neutral-900 p-3 font-mono text-xs text-neutral-100 outline-none focus:border-emerald-500/50"
             required
           />
+          <p className="mt-1 text-xs text-neutral-500">
+            쿠키 확장프로그램의 <b>Export/JSON 내보내기</b> 결과를 통째로 붙여넣어도 ridi-at을 자동으로 찾아 씁니다.
+          </p>
         </div>
         <label className="flex items-start gap-2 text-xs text-neutral-400">
           <input
