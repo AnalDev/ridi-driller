@@ -4,12 +4,14 @@ const KIND_LABEL: Record<Recommendation["kind"], string> = {
   newVolume: "미보유 권",
   unread: "미독",
   authorNew: "작가 신작",
+  newRelease: "신간",
 };
 
 const KIND_COLOR: Record<Recommendation["kind"], string> = {
   newVolume: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30",
   unread: "bg-amber-500/15 text-amber-300 ring-amber-500/30",
   authorNew: "bg-sky-500/15 text-sky-300 ring-sky-500/30",
+  newRelease: "bg-violet-500/15 text-violet-300 ring-violet-500/30",
 };
 
 export interface CardItem {
