@@ -212,12 +212,21 @@ export default function Dashboard({
           </div>
 
           {(tab === "unread" || tab === "finished") && (
-            <p className="mt-3 rounded-lg border border-white/10 bg-neutral-900/60 px-3 py-2 text-xs text-neutral-400">
-              ℹ️ 읽기 상태는 리디의 <b className="text-neutral-300">&lsquo;마지막으로 읽은 권&rsquo;</b>{" "}
-              하나만 기준입니다(리디가 최고 도달 권을 제공하지 않음). 그래서{" "}
-              <b className="text-neutral-300">앞 권을 다시 열면 &lsquo;최근 읽은 권&rsquo;이 그 권으로 내려가</b>,
-              완독한 시리즈가 &lsquo;안 읽은 책&rsquo;으로 보일 수 있어요.
-            </p>
+            <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-xs leading-relaxed text-neutral-400">
+              <p className="font-medium text-amber-300">⚠️ 읽기 상태의 정확한 한계</p>
+              <p className="mt-1">
+                리디는 시리즈별로{" "}
+                <b className="text-neutral-200">&lsquo;가장 최근에 연 권&rsquo; 딱 하나</b>(과 그 시각)만
+                API로 제공합니다. <b className="text-neutral-200">권별 읽은 시각·최고 도달 권을 주는
+                API는 없습니다</b>(리버싱으로 확인). 그래서{" "}
+                <b className="text-neutral-200">2권까지 읽고 1권을 다시 열면 &lsquo;최근 읽은 권&rsquo;이
+                1로 내려가고</b>, 완독한 시리즈가 여기 &lsquo;안 읽은 책&rsquo;에 나타날 수 있습니다.
+              </p>
+              <p className="mt-1 text-neutral-500">
+                이 앱은 <b className="text-neutral-400">추정하지 않고 리디가 준 값 그대로</b>{" "}
+                표시합니다 — &lsquo;최근 읽은 권&rsquo;은 최고 도달이 아니라 마지막으로 연 권입니다.
+              </p>
+            </div>
           )}
 
           <ResultBrowser

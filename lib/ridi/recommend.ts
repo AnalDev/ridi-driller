@@ -207,7 +207,7 @@ export function buildRecommendations(input: RecommendInput): RecommendResult {
     const counts = { lastReadVolume: readVol, ownedCount: owned, totalCount: total, missing };
 
     if (last && last.bookId !== u.b_id) {
-      // opened, but not the latest owned volume → 이어읽기 (owned volumes unread)
+      // opened, but not the latest owned volume → 이어읽기 (추정 안 함, 있는 그대로)
       unread.push({
         ...base,
         ...counts,
