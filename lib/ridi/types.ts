@@ -179,7 +179,7 @@ export interface Recommendation {
 }
 
 export interface SyncProgress {
-  phase: "library" | "enrich" | "reading" | "authors" | "done";
+  phase: "library" | "enrich" | "reading" | "authors" | "ratings" | "done";
   message: string;
   done: number;
   total: number;

@@ -48,11 +48,20 @@ function daysSince(dateStr?: string | null): number {
 const recencyBoost = (dateStr?: string | null, cap = 60) =>
   Math.max(0, cap - daysSince(dateStr) / 3);
 
+export interface RatingInfo {
+  rating?: number;
+  ratingCount?: number;
+  tags: string[];
+}
+
 export interface RecommendInput {
   units: LibraryUnit[];
   meta: Map<string, BookMeta>; // keyed by b_id
   lastRead: Map<string, LastRead | null>; // keyed by series.id
   authorBooks: Map<string, SearchAuthorBook[]>; // keyed by author name
+  // supplemental ratings looked up by title (keyed by series_id and b_id),
+  // used to fill the many owned series the author-name search doesn't surface
+  ratings?: Map<string, RatingInfo>;
 }
 
 export interface RecommendResult {
@@ -93,8 +102,15 @@ function harvestSearchInfo(authorBooks: Map<string, SearchAuthorBook[]>) {
 }
 
 export function buildRecommendations(input: RecommendInput): RecommendResult {
-  const { units, meta, lastRead, authorBooks } = input;
+  const { units, meta, lastRead, authorBooks, ratings } = input;
   const harvest = harvestSearchInfo(authorBooks);
+  // rating/tags for an owned unit: prefer the title-based lookup, fall back to
+  // whatever the author-name search happened to surface.
+  const infoFor = (seriesId: string | undefined, bId: string) =>
+    (seriesId && ratings?.get(seriesId)) ||
+    ratings?.get(bId) ||
+    (seriesId && harvest.bySeries.get(seriesId)) ||
+    harvest.byBook.get(bId);
 
   const ownedSeriesIds = new Set<string>();
   const ownedBookIds = new Set<string>();
@@ -123,7 +139,7 @@ export function buildRecommendations(input: RecommendInput): RecommendResult {
     const s = m.series;
     const names = primaryAuthors(m);
     const title = s?.property.title || m.title.main;
-    const info = (s?.id && harvest.bySeries.get(s.id)) || harvest.byBook.get(u.b_id);
+    const info = infoFor(s?.id, u.b_id);
     const base = {
       authors: names,
       seriesTitle: s ? title : undefined,
@@ -137,6 +153,7 @@ export function buildRecommendations(input: RecommendInput): RecommendResult {
       isSetbook: isBundle || undefined,
       rating: info?.rating,
       publisher: m.publisher?.name,
+      publishDate: m.publish?.ebook_publish,
       purchaseDate: u.purchase_date,
     };
 

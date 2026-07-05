@@ -2,7 +2,8 @@ import { fetchAllUnits, fetchLibraryCount } from "./library";
 import { fetchBooksMeta } from "./books";
 import { fetchLastReadMany } from "./reading";
 import { fetchAuthorBooksMany } from "./authors";
-import { buildRecommendations, type RecommendResult } from "./recommend";
+import { lookupRatings } from "./search";
+import { buildRecommendations, type RatingInfo, type RecommendResult } from "./recommend";
 import { readJson, writeJson } from "../cache";
 import type {
   BookMeta,
@@ -34,6 +35,7 @@ interface RawStore {
   meta: Record<string, BookMeta>;
   lastRead: Record<string, LastRead | null>;
   authorBooks: Record<string, SearchAuthorBook[]>;
+  ratings?: Record<string, RatingInfo>;
 }
 
 function primaryAuthorPairs(m: BookMeta): { name: string; id?: number }[] {
@@ -181,7 +183,26 @@ export async function runSync(
     );
     for (const [k, v] of fetched) authorBooks.set(k, v);
   }
-  recs = buildRecommendations({ units, meta, lastRead, authorBooks });
+
+  // stage 5: ratings/tags by title lookup — author-name search only surfaces
+  // ~40% of owned series, so look up the rest directly by title (precise match
+  // on series_id / b_id). Reuse cached ratings; only probe series still missing.
+  const ratings = new Map<string, RatingInfo>(prev ? Object.entries(prev.ratings ?? {}) : []);
+  const probes = units
+    .map((u) => ({ u, m: meta.get(u.b_id) }))
+    .filter((x) => x.m && !ratings.has(x.m.series?.id ?? x.u.b_id))
+    .map(({ u, m }) => ({
+      title: m!.series?.property.title || m!.title.main,
+      seriesId: m!.series?.id,
+      bId: u.b_id,
+    }));
+  if (probes.length) {
+    const looked = await lookupRatings(probes, (d, t) =>
+      emit({ phase: "ratings", message: `별점 조회 ${d}/${t}`, done: d, total: t }),
+    );
+    for (const [k, v] of looked) ratings.set(k, v);
+  }
+  recs = buildRecommendations({ units, meta, lastRead, authorBooks, ratings });
 
   await saveRaw(sid, {
     syncedAt: Date.now(),
@@ -189,6 +210,7 @@ export async function runSync(
     meta: Object.fromEntries(meta),
     lastRead: Object.fromEntries(lastRead),
     authorBooks: Object.fromEntries(authorBooks),
+    ratings: Object.fromEntries(ratings),
   });
 
   snap = {
