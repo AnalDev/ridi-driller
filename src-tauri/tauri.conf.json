@@ -27,6 +27,8 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "Bengi",
+    "copyright": "Copyright © 2026 Bengi",
     "externalBin": ["binaries/node"],
     "resources": ["server/**/*"],
     "icon": [

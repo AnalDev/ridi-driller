@@ -50,3 +50,5 @@ git tag v0.1.0 && git push origin v0.1.0
 - **macOS**: `APPLE_CERTIFICATE`(base64 .p12), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, 공증용 `APPLE_ID`·`APPLE_PASSWORD`(앱 암호)·`APPLE_TEAM_ID`.
 - **Windows**: 코드서명 인증서로 서명하려면 `tauri.conf.json`의 `bundle.windows.certificateThumbprint`(또는 커스텀 sign 커맨드) 설정 필요.
 - 시크릿이 없으면 워크플로우는 그대로 **미서명 빌드**를 만듭니다.
+
+macOS의 서명 주체는 `Cargo.toml`이나 GitHub 계정명이 아니라 Apple Developer 인증서와 Team ID가 결정합니다. Bengi 명의로 배포하려면 GitHub Actions secret의 `APPLE_CERTIFICATE`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_TEAM_ID`를 Bengi Apple Developer 계정/팀에서 발급한 값으로 교체해야 합니다.

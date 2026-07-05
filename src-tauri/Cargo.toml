@@ -2,7 +2,7 @@
 name = "ridi-driller"
 version = "0.1.0"
 description = "리디 드릴러 — 리디북스 서재 분석 데스크톱 앱"
-authors = ["Bengi"]
+authors = ["Bengi <Bengi.kr@gmail.com>"]
 edition = "2021"
 
 [lib]
