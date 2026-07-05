@@ -38,6 +38,26 @@ export function contentTypeOf(m: BookMeta): ContentType {
   return "기타";
 }
 
+function titleText(m: BookMeta): string {
+  return `${m.title?.prefix ?? ""} ${m.title?.main ?? ""}`;
+}
+
+/** 체험판(free preview) — excluded from missing-volume counting & recommendations. */
+export function isTrial(m: BookMeta): boolean {
+  return !!m.property?.is_trial || /체험판/.test(titleText(m));
+}
+
+const SET_RE = /\[[^\]]*(?:세트|합본)[^\]]*\]|합본판|완결\s*세트|특별\s*세트/;
+
+/** 완결 세트 / 특별세트 / 합본 — a bundle that represents a whole series. */
+export function isSet(m: BookMeta): boolean {
+  return SET_RE.test(titleText(m));
+}
+
+export function isTrialTitle(title: string): boolean {
+  return /체험판/.test(title);
+}
+
 export function topCategoryOf(m: BookMeta): string | undefined {
   const top = topId(m);
   return top ? TOP_CATEGORY[top] ?? m.categories?.[0]?.name : m.categories?.[0]?.name;

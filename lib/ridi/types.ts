@@ -39,10 +39,18 @@ export interface SeriesProperty {
   unit: string; // "권", "화", ...
 }
 
+export interface SeriesPriceInfo {
+  buy?: {
+    total_book_count?: number; // paid volumes available (excludes free/체험판)
+    free_book_count?: number;
+  };
+}
+
 export interface BookSeries {
   id: string;
   volume: number;
   property: SeriesProperty;
+  price_info?: SeriesPriceInfo;
 }
 
 export interface BookCategory {
@@ -79,6 +87,7 @@ export interface BookMeta {
     is_novel?: boolean;
     is_magazine?: boolean;
     is_completed?: boolean;
+    is_trial?: boolean; // 체험판
   };
 }
 
@@ -125,7 +134,12 @@ export type ContentType =
   | "기타";
 
 // ---- recommendations ----
-export type RecKind = "newVolume" | "unread" | "authorNew" | "newRelease";
+export type RecKind =
+  | "newVolume"
+  | "unread"
+  | "finished"
+  | "authorNew"
+  | "newRelease";
 
 export interface Recommendation {
   kind: RecKind;

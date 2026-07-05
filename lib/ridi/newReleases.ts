@@ -1,6 +1,6 @@
 import { fetchBooksMeta } from "./books";
 import { lookupRatings } from "./search";
-import { contentTypeOf, categoryNameOf, topCategoryOf } from "./classify";
+import { contentTypeOf, categoryNameOf, topCategoryOf, isTrial } from "./classify";
 import { readJson } from "../cache";
 import type { BookMeta, Recommendation } from "./types";
 
@@ -99,6 +99,7 @@ export async function buildNewReleases(
   for (const id of ids) {
     const m = meta.get(id);
     if (!m) continue;
+    if (isTrial(m)) continue; // 체험판 is not a new-release worth surfacing
     const s = m.series;
     const seriesId = s?.id;
     const title = s?.property.title || m.title.main;

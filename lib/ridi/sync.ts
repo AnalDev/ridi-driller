@@ -16,7 +16,13 @@ import type {
 export interface Snapshot {
   syncedAt: number;
   count: { item_total_count: number; unit_total_count: number };
-  stats: { units: number; newVolume: number; unread: number; authorNew: number };
+  stats: {
+    units: number;
+    newVolume: number;
+    unread: number;
+    finished: number;
+    authorNew: number;
+  };
   recommendations: RecommendResult;
   partial: boolean;
   incremental?: boolean;
@@ -49,6 +55,7 @@ function statsOf(units: number, recs: RecommendResult) {
     units,
     newVolume: recs.newVolume.length,
     unread: recs.unread.length,
+    finished: recs.finished.length,
     authorNew: recs.authorNew.length,
   };
 }
@@ -110,7 +117,7 @@ export async function runSync(
     syncedAt: Date.now(),
     count,
     stats: statsOf(units.length, recs),
-    recommendations: { ...recs, unread: [], authorNew: [] },
+    recommendations: { ...recs, unread: [], finished: [], authorNew: [] },
     partial: true,
     incremental,
   };

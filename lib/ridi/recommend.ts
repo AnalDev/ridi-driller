@@ -4,6 +4,9 @@ import {
   categoryNameOf,
   topCategoryOf,
   isMagazineSearch,
+  isTrial,
+  isSet,
+  isTrialTitle,
 } from "./classify";
 import type {
   BookMeta,
@@ -55,7 +58,15 @@ export interface RecommendInput {
 export interface RecommendResult {
   newVolume: Recommendation[];
   unread: Recommendation[];
+  finished: Recommendation[];
   authorNew: Recommendation[];
+}
+
+/** Paid volumes released for a series — excludes free 체험판/preview.
+ *  Falls back to opened_book_count when price info is absent. */
+function availableCount(m: BookMeta): number {
+  const paid = m.series?.price_info?.buy?.total_book_count;
+  return typeof paid === "number" ? paid : (m.series?.property.opened_book_count ?? 0);
 }
 
 interface HarvestedInfo {
@@ -101,10 +112,14 @@ export function buildRecommendations(input: RecommendInput): RecommendResult {
 
   const newVolume: Recommendation[] = [];
   const unread: Recommendation[] = [];
+  const finished: Recommendation[] = [];
 
   for (const u of units) {
     const m = meta.get(u.b_id);
     if (!m) continue;
+    // a 체험판(free preview) unit is not something to buy-the-rest-of or read
+    if (isTrial(m)) continue;
+    const isBundle = isSet(m); // 완결/특별 세트·합본 = owns the whole series
     const s = m.series;
     const names = primaryAuthors(m);
     const title = s?.property.title || m.title.main;
@@ -119,20 +134,21 @@ export function buildRecommendations(input: RecommendInput): RecommendResult {
       isAdult: !!m.property?.is_adult_only,
       isMagazine: !!m.property?.is_magazine,
       isCompleted: !!(s?.property.is_completed ?? m.property?.is_completed),
+      isSetbook: isBundle || undefined,
       rating: info?.rating,
       publisher: m.publisher?.name,
       purchaseDate: u.purchase_date,
     };
 
-    // ---- signal 1: missing volumes ----
-    if (s) {
-      const opened = s.property.opened_book_count ?? 0;
+    // ---- signal 1: missing volumes (paid count excludes 체험판; skip sets) ----
+    if (s && !isBundle) {
+      const available = availableCount(m); // paid volumes, excludes 체험판
       const owned = u.unit_count ?? 0;
-      const missing = opened - owned;
+      const missing = available - owned;
       if (missing > 0 && s.property.opened_last_volume_id) {
         const latest = s.property.opened_last_volume_id;
         const completed = s.property.is_completed;
-        const ratio = opened > 0 ? owned / opened : 0;
+        const ratio = available > 0 ? owned / available : 0;
         const latestMeta = meta.get(latest);
         newVolume.push({
           ...base,
@@ -142,13 +158,12 @@ export function buildRecommendations(input: RecommendInput): RecommendResult {
           cover: coverUrl(latest, "large"),
           coverHi: coverUrl(latest, "xxlarge"),
           reason: completed
-            ? `완결인데 ${owned}/${opened}권 소장 · ${missing}권 남음`
-            : `새 권 발매 · 보유 ${owned}권 / 발매 ${opened}권 (${missing}권 미보유)`,
+            ? `완결인데 ${owned}/${available}권 소장 · ${missing}권 남음`
+            : `새 권 발매 · 보유 ${owned}권 / 발매 ${available}권 (${missing}권 미보유)`,
           ownedCount: owned,
-          totalCount: opened,
+          totalCount: available,
           missing,
-          publishDate:
-            latestMeta?.publish?.ebook_publish || m.publish?.ebook_publish,
+          publishDate: latestMeta?.publish?.ebook_publish || m.publish?.ebook_publish,
           storeUrl: storeUrl(latest),
           score:
             ratio * 100 +
@@ -159,12 +174,13 @@ export function buildRecommendations(input: RecommendInput): RecommendResult {
       }
     }
 
-    // ---- signal 2: unread / continue ----
+    // ---- signal 2/3: reading status → unread / continue / finished ----
     const last = s?.id ? lastRead.get(s.id) : null;
-    const opened = s?.property.opened_book_count ?? u.unit_count ?? 0;
+    const available = availableCount(m);
+    const missing = Math.max(0, available - u.unit_count);
     if (last && last.bookId !== u.b_id) {
+      // opened but not the latest owned volume → 이어읽기
       const readVol = meta.get(last.bookId)?.series?.volume;
-      const ownedVol = m.series?.volume ?? u.unit_count;
       unread.push({
         ...base,
         kind: "unread",
@@ -179,9 +195,33 @@ export function buildRecommendations(input: RecommendInput): RecommendResult {
         lastReadAt: last.lastReadAt,
         lastReadVolume: readVol,
         ownedCount: u.unit_count,
-        totalCount: opened,
+        totalCount: available,
+        missing,
         storeUrl: storeUrl(u.b_id),
         score: 1000 + recencyBoost(u.purchase_date, 200),
+      });
+    } else if (last && last.bookId === u.b_id) {
+      // read up to the latest owned volume → 다 읽은 책
+      finished.push({
+        ...base,
+        kind: "finished",
+        bId: u.b_id,
+        title,
+        cover: coverUrl(u.b_id, "large"),
+        coverHi: coverUrl(u.b_id, "xxlarge"),
+        reason:
+          missing > 0
+            ? `보유분 다 읽음 · 새 ${missing}권 나옴`
+            : base.isCompleted
+              ? "완독 · 완결 시리즈"
+              : "보유분 다 읽음",
+        lastReadBId: last.bookId,
+        lastReadAt: last.lastReadAt,
+        ownedCount: u.unit_count,
+        totalCount: available,
+        missing,
+        storeUrl: storeUrl(u.b_id),
+        score: recencyBoost(last.lastReadAt, 300),
       });
     } else if (!last) {
       const age = daysSince(u.purchase_date);
@@ -195,7 +235,8 @@ export function buildRecommendations(input: RecommendInput): RecommendResult {
         reason: age < 90 ? "최근에 샀는데 아직 안 읽었어요" : "소장 중 · 아직 펼쳐보지 않음",
         lastReadAt: null,
         ownedCount: u.unit_count,
-        totalCount: opened,
+        totalCount: available,
+        missing,
         storeUrl: storeUrl(u.b_id),
         score: Math.max(0, 300 - age),
       });
@@ -214,6 +255,7 @@ export function buildRecommendations(input: RecommendInput): RecommendResult {
 
   for (const [name, b] of ordered) {
     if (!b.b_id) continue;
+    if (isTrialTitle(b.title)) continue; // 체험판 is not a recommendation
     if (b.series_id && ownedSeriesIds.has(b.series_id)) continue;
     if (ownedBookIds.has(b.b_id)) continue;
     const nt = normTitle(b.title);
@@ -258,6 +300,7 @@ export function buildRecommendations(input: RecommendInput): RecommendResult {
   return {
     newVolume: newVolume.sort(byScore),
     unread: unread.sort(byScore),
+    finished: finished.sort(byScore),
     authorNew: [...authorNewMap.values()].sort(byScore),
   };
 }
