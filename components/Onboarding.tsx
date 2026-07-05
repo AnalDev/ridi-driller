@@ -151,8 +151,9 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
             </ol>
           </div>
           <div>
-            <p className="font-medium text-neutral-200">Vercel 등 공개 배포는 비권장</p>
+            <p className="font-medium text-neutral-200">Vercel 등 공개 배포는 비권장 (실측: Vercel은 안 됨)</p>
             <ul className="mt-1 list-disc space-y-0.5 pl-5">
+              <li><b className="text-red-300">Cloudflare가 데이터센터 IP 차단</b> → Vercel 서버에서 리디 호출이 막혀 로그인 502 (같은 토큰도 로컬은 200). 가장 치명적이라 DB로 바꿔도 해결 안 됨.</li>
               <li>서버리스·임시 파일시스템 → <code>data/</code> 파일 저장이 유지 안 됨(로그인/캐시 깨짐, 외부 DB 필요)</li>
               <li>함수 실행시간 제한(Hobby 짧음) → 2~3분 전체 동기화가 <b>타임아웃</b></li>
               <li>공개 URL + 내 암호화 토큰이 남의 인프라에 올라감 → <b>유출 위험과 책임은 본인</b></li>

@@ -57,7 +57,10 @@ export async function POST(req: Request) {
       );
     }
     return NextResponse.json(
-      { error: "리디북스 연결에 실패했습니다. cf_clearance 쿠키를 함께 넣어보세요." },
+      {
+        error:
+          "리디북스(Cloudflare)에 연결하지 못했습니다. Vercel 등 클라우드/데이터센터에서는 리디 Cloudflare가 서버 IP를 차단합니다 — 로컬(npm run dev)에서 실행하세요. 로컬에서도 계속 실패하면 cf_clearance 쿠키를 함께 넣어보세요.",
+      },
       { status: 502 },
     );
   }
