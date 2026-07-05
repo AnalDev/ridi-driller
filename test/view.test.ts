@@ -173,11 +173,26 @@ describe("applyView + SORT_OPTIONS", () => {
     const out = applyView(list, view({ types: ["만화"], sortKey: "rating", sortDir: "desc" }));
     expect(out.map((r) => r.title)).toEqual(["keep-hi", "keep-lo"]);
   });
-  it("exposes tab-specific sort options", () => {
-    const nv = SORT_OPTIONS.filter((o) => !o.tabs || o.tabs.includes("newVolume"));
-    const ur = SORT_OPTIONS.filter((o) => !o.tabs || o.tabs.includes("unread"));
-    expect(nv.some((o) => o.key === "missing")).toBe(true);
-    expect(nv.some((o) => o.key === "lastReadAt")).toBe(false);
-    expect(ur.some((o) => o.key === "lastReadAt")).toBe(true);
+  it("exposes only tab-appropriate sort options", () => {
+    const opts = (tab: string) =>
+      SORT_OPTIONS.filter((o) => !o.tabs || o.tabs.includes(tab)).map((o) => o.key);
+    // owned tabs get counts / purchase / reading; not-owned tabs don't
+    expect(opts("newVolume")).toContain("missing");
+    expect(opts("newVolume")).toContain("purchaseDate");
+    expect(opts("newVolume")).not.toContain("lastReadAt"); // 미보유 신권엔 읽기기록 없음
+    expect(opts("finished")).not.toContain("missing"); // 다 읽은 책은 미보유 0
+    expect(opts("finished")).toContain("lastReadAt");
+    // 미구매작/신간: 구매일·보유·미보유·읽은권 없어야 함
+    for (const bad of ["purchaseDate", "owned", "missing", "lastReadVolume", "lastReadAt"]) {
+      expect(opts("authorNew")).not.toContain(bad);
+      expect(opts("newRelease")).not.toContain(bad);
+    }
+    // 신간은 발매일 정렬 가능, 미구매작은 불가(발매일 데이터 없음)
+    expect(opts("newRelease")).toContain("publishDate");
+    expect(opts("authorNew")).not.toContain("publishDate");
+    // score/rating/title은 모든 탭 공통
+    for (const tab of ["newVolume", "unread", "finished", "authorNew", "newRelease"]) {
+      expect(opts(tab)).toEqual(expect.arrayContaining(["score", "rating", "title"]));
+    }
   });
 });

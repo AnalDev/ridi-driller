@@ -126,14 +126,21 @@ export function facets(list: Recommendation[]) {
   };
 }
 
+// A sort option only appears on a tab whose items actually carry that field.
+// `tabs: undefined` = applies to every tab (score / rating / title).
+//   - publishDate: 미보유 신권·안 읽은·다 읽은·신간 (소장/신간은 발매일 있음, 미구매작은 없음)
+//   - missing(미보유 권수): 소장 시리즈만, 다 읽은 책은 항상 0이라 제외
+//   - owned(보유 권수): 소장 탭만
+//   - lastReadVolume / lastReadAt: 읽기 기록이 있는 안 읽은·다 읽은 책만
+//   - purchaseDate(구매일): 구매한(소장) 탭만 — 미구매작/신간엔 없음
 export const SORT_OPTIONS: { key: SortKey; label: string; tabs?: string[] }[] = [
   { key: "score", label: "추천순" },
-  { key: "publishDate", label: "발매일" },
   { key: "rating", label: "별점" },
+  { key: "title", label: "제목" },
+  { key: "publishDate", label: "발매일", tabs: ["newVolume", "unread", "finished", "newRelease"] },
   { key: "missing", label: "미보유 권수", tabs: ["newVolume", "unread"] },
-  { key: "owned", label: "보유 권수" },
+  { key: "owned", label: "보유 권수", tabs: ["newVolume", "unread", "finished"] },
   { key: "lastReadVolume", label: "읽은 권수", tabs: ["unread", "finished"] },
   { key: "lastReadAt", label: "최종 읽은 시각", tabs: ["unread", "finished"] },
-  { key: "purchaseDate", label: "구매일" },
-  { key: "title", label: "제목" },
+  { key: "purchaseDate", label: "구매일", tabs: ["newVolume", "unread", "finished"] },
 ];

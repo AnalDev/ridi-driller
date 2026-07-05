@@ -33,6 +33,19 @@ const TABS: { key: TabKey; label: string }[] = [
 ];
 const CACHE_KEY = "ridi-driller-snapshot-v4";
 
+function timeAgo(ts: number): string {
+  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (s < 60) return "방금 전";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}분 전`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}시간 전`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}일 전`;
+  const mo = Math.floor(d / 30);
+  return mo < 12 ? `${mo}개월 전` : `${Math.floor(mo / 12)}년 전`;
+}
+
 export default function Dashboard({
   count,
   onLogout,
@@ -107,8 +120,8 @@ export default function Dashboard({
             {count.unit_total_count.toLocaleString()}작품
             {snap && (
               <span className="ml-2 text-neutral-500">
-                · 마지막 분석 {new Date(snap.syncedAt).toLocaleString("ko-KR")}
-                {snap.partial && " (진행중)"}
+                · 마지막 분석 {new Date(snap.syncedAt).toLocaleString("ko-KR")} (
+                {timeAgo(snap.syncedAt)}){snap.partial && " · 진행중"}
               </span>
             )}
           </p>
