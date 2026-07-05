@@ -7,20 +7,28 @@ import type { Recommendation, SyncProgress } from "@/lib/ridi/types";
 interface Snapshot {
   syncedAt: number;
   count: { item_total_count: number; unit_total_count: number };
-  stats: { units: number; newVolume: number; unread: number; authorNew: number };
+  stats: {
+    units: number;
+    newVolume: number;
+    unread: number;
+    finished: number;
+    authorNew: number;
+  };
   recommendations: {
     newVolume: Recommendation[];
     unread: Recommendation[];
+    finished: Recommendation[];
     authorNew: Recommendation[];
   };
   partial: boolean;
   incremental?: boolean;
 }
 
-type TabKey = "newVolume" | "unread" | "authorNew";
+type TabKey = "newVolume" | "unread" | "finished" | "authorNew";
 const TABS: { key: TabKey; label: string }[] = [
   { key: "newVolume", label: "미보유 신권" },
   { key: "unread", label: "안 읽은 책" },
+  { key: "finished", label: "다 읽은 책" },
   { key: "authorNew", label: "작가 신작" },
 ];
 const CACHE_KEY = "ridi-driller-snapshot-v2";

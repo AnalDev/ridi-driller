@@ -8,6 +8,7 @@ export const runtime = "nodejs";
 const KIND_LABEL: Record<RecKind, string> = {
   newVolume: "미보유 신권",
   unread: "안 읽은 책",
+  finished: "다 읽은 책",
   authorNew: "작가 신작",
   newRelease: "신간",
 };
@@ -54,10 +55,15 @@ export async function GET(req: Request) {
 
   const rec = snap.recommendations;
   const single =
-    kind === "newVolume" || kind === "unread" || kind === "authorNew" ? kind : null;
+    kind === "newVolume" ||
+    kind === "unread" ||
+    kind === "finished" ||
+    kind === "authorNew"
+      ? kind
+      : null;
   let rows: Recommendation[] = single
     ? rec[single]
-    : [...rec.newVolume, ...rec.unread, ...rec.authorNew];
+    : [...rec.newVolume, ...rec.unread, ...rec.finished, ...rec.authorNew];
   if (!includeAdult) rows = rows.filter((r) => !r.isAdult);
   if (!includeMag) rows = rows.filter((r) => !r.isMagazine);
 

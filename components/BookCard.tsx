@@ -3,6 +3,7 @@ import type { Recommendation } from "@/lib/ridi/types";
 const KIND_LABEL: Record<Recommendation["kind"], string> = {
   newVolume: "미보유 권",
   unread: "미독",
+  finished: "완독",
   authorNew: "작가 신작",
   newRelease: "신간",
 };
@@ -10,6 +11,7 @@ const KIND_LABEL: Record<Recommendation["kind"], string> = {
 const KIND_COLOR: Record<Recommendation["kind"], string> = {
   newVolume: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30",
   unread: "bg-amber-500/15 text-amber-300 ring-amber-500/30",
+  finished: "bg-neutral-500/20 text-neutral-300 ring-neutral-500/30",
   authorNew: "bg-sky-500/15 text-sky-300 ring-sky-500/30",
   newRelease: "bg-violet-500/15 text-violet-300 ring-violet-500/30",
 };

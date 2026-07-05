@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import BookCard, { type CardItem } from "./BookCard";
 import FilterBar from "./FilterBar";
 import { applyView, defaultView, facets, type ViewState } from "@/lib/view";
@@ -69,9 +69,10 @@ export default function ResultBrowser({
   csvName: string;
 }) {
   const [view, setView] = useState<ViewState>(defaultView);
-  const [pageMode, setPageMode] = useState<"more" | "pages">("more");
+  const [pageMode, setPageMode] = useState<"scroll" | "more" | "pages">("scroll");
   const [page, setPage] = useState(1);
   const [visible, setVisible] = useState(PAGE_SIZE);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   const tabFacets = useMemo(() => facets(items), [items]);
   const filtered = useMemo(() => applyView(items, view), [items, view]);
@@ -81,11 +82,29 @@ export default function ResultBrowser({
     setPage(1);
   }, [view]);
 
+  // infinite scroll: load more when the sentinel nears the viewport.
+  // `visible` is a dep so the observer re-arms and keeps filling the screen.
+  useEffect(() => {
+    if (pageMode !== "scroll") return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisible((v) => (v < filtered.length ? v + PAGE_SIZE : v));
+        }
+      },
+      { rootMargin: "800px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [pageMode, visible, filtered.length]);
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const shown =
-    pageMode === "more"
-      ? filtered.slice(0, visible)
-      : filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    pageMode === "pages"
+      ? filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+      : filtered.slice(0, visible);
 
   function downloadCsv() {
     const blob = new Blob([toCsv(filtered)], { type: "text/csv;charset=utf-8" });
@@ -111,18 +130,21 @@ export default function ResultBrowser({
         <span className="text-neutral-400">{filtered.length.toLocaleString()}건</span>
         <div className="flex items-center gap-2">
           <div className="flex overflow-hidden rounded-md text-xs ring-1 ring-white/10">
-            <button
-              onClick={() => setPageMode("more")}
-              className={`px-2.5 py-1.5 ${pageMode === "more" ? "bg-emerald-500 text-neutral-950" : "bg-neutral-900 text-neutral-400"}`}
-            >
-              더보기
-            </button>
-            <button
-              onClick={() => setPageMode("pages")}
-              className={`px-2.5 py-1.5 ${pageMode === "pages" ? "bg-emerald-500 text-neutral-950" : "bg-neutral-900 text-neutral-400"}`}
-            >
-              페이지
-            </button>
+            {(
+              [
+                ["scroll", "무한"],
+                ["more", "더보기"],
+                ["pages", "페이지"],
+              ] as const
+            ).map(([mode, label]) => (
+              <button
+                key={mode}
+                onClick={() => setPageMode(mode)}
+                className={`px-2.5 py-1.5 ${pageMode === mode ? "bg-emerald-500 text-neutral-950" : "bg-neutral-900 text-neutral-400"}`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
           <button
             onClick={downloadCsv}
@@ -151,6 +173,12 @@ export default function ResultBrowser({
               >
                 더 보기 ({(filtered.length - visible).toLocaleString()}권 남음)
               </button>
+            </div>
+          )}
+
+          {pageMode === "scroll" && visible < filtered.length && (
+            <div ref={sentinelRef} className="py-8 text-center text-xs text-neutral-500">
+              불러오는 중… ({(filtered.length - visible).toLocaleString()}권 남음)
             </div>
           )}
 
