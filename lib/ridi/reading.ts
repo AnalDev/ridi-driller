@@ -1,11 +1,9 @@
-import pLimit from "p-limit";
-import { RidiAuthError, cookieHeader } from "./client";
+import { RidiAuthError, cookieHeader, schedule } from "./client";
 import type { RidiCreds, LastRead } from "./types";
 
 const STORE = "https://ridibooks.com";
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36";
-const limit = pLimit(6);
 
 /**
  * Last-read position within a series (book id + timestamp), or null if never
@@ -18,15 +16,17 @@ export async function fetchLastRead(
 ): Promise<LastRead | null> {
   const url = `${STORE}/api/user/reading-histories/series/${seriesId}/latest`;
   try {
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": UA,
-        Accept: "application/json",
-        Referer: "https://ridibooks.com/",
-        Cookie: cookieHeader(creds),
-      },
-      cache: "no-store",
-    });
+    const res = await schedule(() =>
+      fetch(url, {
+        headers: {
+          "User-Agent": UA,
+          Accept: "application/json",
+          Referer: "https://ridibooks.com/",
+          Cookie: cookieHeader(creds),
+        },
+        cache: "no-store",
+      }),
+    );
     if (res.status === 401 || res.status === 403) throw new RidiAuthError(res.status);
     if (!res.ok) return null; // 404 = never opened
     const data = (await res.json()) as {
@@ -57,12 +57,10 @@ export async function fetchLastReadMany(
   const out = new Map<string, LastRead | null>();
   let done = 0;
   await Promise.all(
-    unique.map((sid) =>
-      limit(async () => {
-        out.set(sid, await fetchLastRead(creds, sid));
-        onProgress?.(++done, unique.length);
-      }),
-    ),
+    unique.map(async (sid) => {
+      out.set(sid, await fetchLastRead(creds, sid));
+      onProgress?.(++done, unique.length);
+    }),
   );
   return out;
 }

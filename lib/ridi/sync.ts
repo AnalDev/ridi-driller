@@ -132,10 +132,18 @@ export async function runSync(
   await publish(snap);
   emit({ phase: "enrich", message: `신권 ${recs.newVolume.length}건`, done: 1, total: 1 });
 
-  // stage 3: reading history (objects with last_read_at)
+  // stage 3: reading history · author works · ratings run CONCURRENTLY — they
+  // only depend on stage-2 metadata, not on each other. A shared global gate
+  // (lib/ridi/client) caps the total request rate, so overlapping them cuts
+  // wall-clock to ~max(stage) instead of the sum, without hammering RIDI.
   const lastRead = new Map<string, LastRead | null>(
     prev ? Object.entries(prev.lastRead) : [],
   );
+  const authorBooks = new Map<string, SearchAuthorBook[]>(
+    prev ? Object.entries(prev.authorBooks) : [],
+  );
+  const ratings = new Map<string, RatingInfo>(prev ? Object.entries(prev.ratings ?? {}) : []);
+
   const allSeriesIds = [
     ...new Set(
       units.map((u) => meta.get(u.b_id)?.series?.id).filter((x): x is string => !!x),
@@ -146,33 +154,7 @@ export async function runSync(
         (s) => !lastRead.has(s) || changedSeries(s, units, meta, changedUnitIds),
       )
     : allSeriesIds;
-  if (seriesToRead.length) {
-    const fetched = await fetchLastReadMany(creds, seriesToRead, (d, t) =>
-      emit({ phase: "reading", message: `읽기 기록 ${d}/${t}`, done: d, total: t }),
-    );
-    for (const [k, v] of fetched) lastRead.set(k, v);
-  }
 
-  // stage 2b: enrich last-read books so we know which volume was reached
-  const readBookIds = [...lastRead.values()]
-    .filter((v): v is LastRead => !!v)
-    .map((v) => v.bookId);
-  await enrichMissing(meta, readBookIds, emit);
-
-  recs = buildRecommendations({ units, meta, lastRead, authorBooks: new Map() });
-  snap = {
-    ...snap,
-    syncedAt: Date.now(),
-    stats: statsOf(units.length, recs),
-    recommendations: { ...recs, authorNew: [] },
-  };
-  await publish(snap);
-  emit({ phase: "reading", message: `미독 ${recs.unread.length}건`, done: 1, total: 1 });
-
-  // stage 4: author works (new authors only in incremental mode)
-  const authorBooks = new Map<string, SearchAuthorBook[]>(
-    prev ? Object.entries(prev.authorBooks) : [],
-  );
   const authorPairs: { name: string; id?: number }[] = [];
   const seenAuthor = new Set(authorBooks.keys());
   for (const m of meta.values()) {
@@ -183,18 +165,8 @@ export async function runSync(
       }
     }
   }
-  if (authorPairs.length) {
-    const fetched = await fetchAuthorBooksMany(authorPairs, (d, t) =>
-      emit({ phase: "authors", message: `작가 작품 조회 ${d}/${t}`, done: d, total: t }),
-    );
-    for (const [k, v] of fetched) authorBooks.set(k, v);
-  }
 
-  // stage 5: ratings/tags by title lookup — author-name search only surfaces
-  // ~40% of owned series, so look up the rest directly by title (precise match
-  // on series_id / b_id). Reuse cached ratings; only probe series still missing.
-  const ratings = new Map<string, RatingInfo>(prev ? Object.entries(prev.ratings ?? {}) : []);
-  const probes = units
+  const ratingProbes = units
     .map((u) => ({ u, m: meta.get(u.b_id) }))
     .filter((x) => x.m && !ratings.has(x.m.series?.id ?? x.u.b_id))
     .map(({ u, m }) => ({
@@ -202,12 +174,37 @@ export async function runSync(
       seriesId: m!.series?.id,
       bId: u.b_id,
     }));
-  if (probes.length) {
-    const looked = await lookupRatings(probes, (d, t) =>
-      emit({ phase: "ratings", message: `별점 조회 ${d}/${t}`, done: d, total: t }),
-    );
-    for (const [k, v] of looked) ratings.set(k, v);
-  }
+
+  // combined progress across the three overlapping stages
+  const grand = seriesToRead.length + authorPairs.length + ratingProbes.length;
+  const cur = { r: 0, a: 0, g: 0 };
+  const rep = (k: "r" | "a" | "g", d: number) => {
+    cur[k] = d;
+    const done = cur.r + cur.a + cur.g;
+    emit({ phase: "collect", message: `데이터 수집 ${done}/${grand}`, done, total: grand });
+  };
+
+  const [readMap, authorMap, ratingMap] = await Promise.all([
+    seriesToRead.length
+      ? fetchLastReadMany(creds, seriesToRead, (d) => rep("r", d))
+      : Promise.resolve(new Map<string, LastRead | null>()),
+    authorPairs.length
+      ? fetchAuthorBooksMany(authorPairs, (d) => rep("a", d))
+      : Promise.resolve(new Map<string, SearchAuthorBook[]>()),
+    ratingProbes.length
+      ? lookupRatings(ratingProbes, (d) => rep("g", d))
+      : Promise.resolve(new Map<string, RatingInfo>()),
+  ]);
+  for (const [k, v] of readMap) lastRead.set(k, v);
+  for (const [k, v] of authorMap) authorBooks.set(k, v);
+  for (const [k, v] of ratingMap) ratings.set(k, v);
+
+  // enrich last-read books so we know which volume each was read up to
+  const readBookIds = [...lastRead.values()]
+    .filter((v): v is LastRead => !!v)
+    .map((v) => v.bookId);
+  await enrichMissing(meta, readBookIds, emit);
+
   recs = buildRecommendations({ units, meta, lastRead, authorBooks, ratings });
 
   await saveRaw(sid, {

@@ -1,9 +1,7 @@
-import pLimit from "p-limit";
 import { ridiGet } from "./client";
 import type { SearchAuthorBook } from "./types";
 
 const SEARCH_API = "https://search-api.ridibooks.com";
-const limit = pLimit(4);
 
 interface SearchResponse {
   total: number;
@@ -47,12 +45,10 @@ export async function fetchAuthorBooksMany(
   const out = new Map<string, SearchAuthorBook[]>();
   let done = 0;
   await Promise.all(
-    list.map((a) =>
-      limit(async () => {
-        out.set(a.name, await fetchAuthorBooks(a.name, a.id));
-        onProgress?.(++done, list.length);
-      }),
-    ),
+    list.map(async (a) => {
+      out.set(a.name, await fetchAuthorBooks(a.name, a.id));
+      onProgress?.(++done, list.length);
+    }),
   );
   return out;
 }

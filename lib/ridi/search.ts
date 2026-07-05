@@ -1,9 +1,7 @@
-import pLimit from "p-limit";
 import { ridiGet } from "./client";
 import type { SearchAuthorBook } from "./types";
 
 const SEARCH_API = "https://search-api.ridibooks.com";
-const limit = pLimit(4);
 
 interface SearchResponse {
   total: number;
@@ -43,25 +41,23 @@ export async function lookupRatings(
   });
   let done = 0;
   await Promise.all(
-    list.map((p) =>
-      limit(async () => {
-        const results = await searchBooks(p.title, 10);
-        const match =
-          results.find((b) => p.seriesId && b.series_id === p.seriesId) ||
-          results.find((b) => b.b_id === p.bId) ||
-          results[0];
-        if (match) {
-          const info = {
-            rating: match.buyer_rating_score,
-            ratingCount: match.buyer_rating_count,
-            tags: (match.tags_info ?? []).map((t) => t.tag_name),
-          };
-          if (p.seriesId) out.set(p.seriesId, info);
-          out.set(p.bId, info);
-        }
-        onProgress?.(++done, list.length);
-      }),
-    ),
+    list.map(async (p) => {
+      const results = await searchBooks(p.title, 10);
+      const match =
+        results.find((b) => p.seriesId && b.series_id === p.seriesId) ||
+        results.find((b) => b.b_id === p.bId) ||
+        results[0];
+      if (match) {
+        const info = {
+          rating: match.buyer_rating_score,
+          ratingCount: match.buyer_rating_count,
+          tags: (match.tags_info ?? []).map((t) => t.tag_name),
+        };
+        if (p.seriesId) out.set(p.seriesId, info);
+        out.set(p.bId, info);
+      }
+      onProgress?.(++done, list.length);
+    }),
   );
   return out;
 }

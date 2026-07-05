@@ -151,13 +151,12 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
             </ol>
           </div>
           <div>
-            <p className="font-medium text-neutral-200">Vercel 등 공개 배포는 비권장 (실측: Vercel은 안 됨)</p>
+            <p className="font-medium text-neutral-200">Vercel 배포 (동작함)</p>
             <ul className="mt-1 list-disc space-y-0.5 pl-5">
-              <li><b className="text-red-300">Cloudflare가 데이터센터 IP 차단</b> → Vercel 서버에서 리디 호출이 막혀 로그인 502 (같은 토큰도 로컬은 200). 가장 치명적이라 DB로 바꿔도 해결 안 됨.</li>
-              <li>서버리스·임시 파일시스템 → <code>data/</code> 파일 저장이 유지 안 됨(로그인/캐시 깨짐, 외부 DB 필요)</li>
-              <li>함수 실행시간 제한(Hobby 짧음) → 2~3분 전체 동기화가 <b>타임아웃</b></li>
-              <li>공개 URL + 내 암호화 토큰이 남의 인프라에 올라감 → <b>유출 위험과 책임은 본인</b></li>
-              <li>정 배포한다면 접근을 나만 가능하게 제한하고, 저장소·타임아웃을 손보세요.</li>
+              <li>토큰을 서버에 저장하지 않고 <b>httpOnly 쿠키</b>에만 두므로 Vercel에서도 로그인·조회가 됩니다. (Cloudflare는 Vercel을 막지 않음 — 실측 확인)</li>
+              <li>서버는 무상태라 <b>여러 명이 각자 자기 쿠키로 안전하게</b> 사용 가능. 서버엔 아무 토큰도 안 남음.</li>
+              <li>전체 동기화는 수 분 소요 — 중간에 끊겨도 부분 결과는 스트리밍으로 표시되고, <b>빠른 업데이트</b>로 이어갈 수 있음.</li>
+              <li>공개 URL이니 원치 않으면 접근 제어를 추가하세요. 가장 안전한 건 <b>로컬 실행</b>.</li>
             </ul>
           </div>
           <p className="text-neutral-500">
