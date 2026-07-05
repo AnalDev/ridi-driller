@@ -125,7 +125,7 @@ export type ContentType =
   | "기타";
 
 // ---- recommendations ----
-export type RecKind = "newVolume" | "unread" | "authorNew";
+export type RecKind = "newVolume" | "unread" | "authorNew" | "newRelease";
 
 export interface Recommendation {
   kind: RecKind;
@@ -160,6 +160,7 @@ export interface Recommendation {
   publisher?: string;
 
   lastReadBId?: string;
+  highlight?: "owned" | "author" | null; // 신간 page cross-reference
   score: number; // default ordering
 }
 

@@ -9,6 +9,7 @@ const KIND_LABEL: Record<RecKind, string> = {
   newVolume: "미보유 신권",
   unread: "안 읽은 책",
   authorNew: "작가 신작",
+  newRelease: "신간",
 };
 
 function csvCell(v: string | number | undefined | null): string {
@@ -52,10 +53,11 @@ export async function GET(req: Request) {
   const includeMag = url.searchParams.get("magazine") !== "0";
 
   const rec = snap.recommendations;
-  let rows: Recommendation[] =
-    !kind || kind === "all"
-      ? [...rec.newVolume, ...rec.unread, ...rec.authorNew]
-      : rec[kind];
+  const single =
+    kind === "newVolume" || kind === "unread" || kind === "authorNew" ? kind : null;
+  let rows: Recommendation[] = single
+    ? rec[single]
+    : [...rec.newVolume, ...rec.unread, ...rec.authorNew];
   if (!includeAdult) rows = rows.filter((r) => !r.isAdult);
   if (!includeMag) rows = rows.filter((r) => !r.isMagazine);
 
