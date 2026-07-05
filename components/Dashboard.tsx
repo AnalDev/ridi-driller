@@ -31,7 +31,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "finished", label: "다 읽은 책" },
   { key: "authorNew", label: "작가 신작" },
 ];
-const CACHE_KEY = "ridi-driller-snapshot-v2";
+const CACHE_KEY = "ridi-driller-snapshot-v3";
 
 export default function Dashboard({
   count,
@@ -187,7 +187,7 @@ export default function Dashboard({
               >
                 {t.label}
                 <span className="ml-1.5 text-xs text-neutral-500">
-                  {snap.recommendations[t.key].length}
+                  {(snap.recommendations[t.key] ?? []).length}
                 </span>
                 {tab === t.key && (
                   <span className="absolute inset-x-2 -bottom-px h-0.5 rounded bg-emerald-500" />
@@ -198,7 +198,7 @@ export default function Dashboard({
 
           <ResultBrowser
             key={tab}
-            items={snap.recommendations[tab]}
+            items={snap.recommendations[tab] ?? []}
             tab={tab}
             csvName={`ridi-driller-${tab}`}
           />
