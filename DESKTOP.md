@@ -30,4 +30,23 @@ npm run app:dev      # = tauri dev : next dev 를 띄우고 데스크톱 창을 
 1. **Node 사이드카 번들**: 빌드된 Next 서버(`next start`)와 Node 런타임을 Tauri sidecar로 동봉해 앱이 로컬에서 스폰. (플랫폼별 Node 바이너리 동봉 필요)
 2. **정적 SPA로 이식**: API 라우트 로직을 클라이언트로 옮기고 리디 호출을 Tauri HTTP 플러그인(`@tauri-apps/plugin-http`, CORS 우회)으로 수행. `recommend/view/classify` 등 순수 로직은 그대로 재사용.
 
-→ 지금은 **개발 실행(`npm run app:dev`)이 완전한 데스크톱 앱**으로 동작합니다. 배포본은 위 사이드카 작업을 이어서 하면 됩니다.
+→ 지금은 **개발 실행(`npm run app:dev`)이 완전한 데스크톱 앱**으로 동작하고, **`npm run app:build`로 배포본(dmg/app)** 도 생성됩니다.
+
+## 로컬 배포 빌드
+```bash
+npm run app:build   # = tauri build : next standalone + node 사이드카 번들 → dmg/app(또는 msi/exe)
+# 산출물: src-tauri/target/release/bundle/
+```
+`build:sidecar`가 **실행 중인 OS의 Node 바이너리**를 사이드카로 번들하므로, 그 플랫폼용 배포본이 나옵니다.
+
+## 멀티플랫폼 자동 빌드 (GitHub Actions)
+`.github/workflows/release.yml` — **`v*` 태그 push** 또는 수동 실행(workflow_dispatch) 시 macOS(arm64+x64)·Windows·Linux 빌드를 만들어 **드래프트 Release**에 첨부합니다.
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+### 코드서명 (선택 · 시크릿 있으면 자동 적용)
+미서명 빌드는 첫 실행 시 macOS Gatekeeper / Windows SmartScreen 우회가 필요합니다. GitHub 저장소 Secrets에 아래를 넣으면 서명·공증이 적용됩니다.
+- **macOS**: `APPLE_CERTIFICATE`(base64 .p12), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, 공증용 `APPLE_ID`·`APPLE_PASSWORD`(앱 암호)·`APPLE_TEAM_ID`.
+- **Windows**: 코드서명 인증서로 서명하려면 `tauri.conf.json`의 `bundle.windows.certificateThumbprint`(또는 커스텀 sign 커맨드) 설정 필요.
+- 시크릿이 없으면 워크플로우는 그대로 **미서명 빌드**를 만듭니다.

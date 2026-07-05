@@ -1,7 +1,7 @@
 // Assemble the Next.js standalone server into a self-contained folder that the
 // Tauri sidecar ships and runs. Next's standalone output omits static assets
 // and public/, so we copy them next to server.js.
-import { cp, rm, mkdir } from "node:fs/promises";
+import { cp, rm, mkdir, chmod } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
@@ -36,7 +36,9 @@ const binDir = path.join(root, "src-tauri", "binaries");
 await mkdir(binDir, { recursive: true });
 const ext = process.platform === "win32" ? ".exe" : "";
 const binName = `node-${triple}${ext}`;
-await cp(process.execPath, path.join(binDir, binName));
+const binPath = path.join(binDir, binName);
+await cp(process.execPath, binPath);
+if (process.platform !== "win32") await chmod(binPath, 0o755);
 console.log("assembled Tauri server sidecar →", dest);
 console.log("bundled node runtime →", path.join(binDir, binName));
 

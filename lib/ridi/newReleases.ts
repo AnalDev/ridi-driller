@@ -70,10 +70,21 @@ async function fetchNewReleaseBooks(genreId: number): Promise<NrBook[]> {
   }
 }
 
+// normalize a title for owned-vs-new-release matching (drop volume markers etc.)
+const normTitle = (t: string) =>
+  t
+    .replace(/[[【][^\]】]*[\]】]/g, "")
+    .replace(/\d+\s*(권|화|부)/g, "")
+    .replace(/\(.*?\)/g, "")
+    .replace(/\s+/g, "")
+    .toLowerCase()
+    .trim();
+
 interface OwnedRefs {
   seriesIds: Set<string>;
   bookIds: Set<string>;
   authors: Set<string>;
+  titles: Set<string>;
 }
 
 async function ownedRefs(sid: string): Promise<OwnedRefs> {
@@ -84,15 +95,18 @@ async function ownedRefs(sid: string): Promise<OwnedRefs> {
   const seriesIds = new Set<string>();
   const bookIds = new Set<string>();
   const authors = new Set<string>();
+  const titles = new Set<string>();
   if (raw) {
     for (const u of raw.units) {
       bookIds.add(u.b_id);
       const m = raw.meta[u.b_id];
       if (m?.series?.id) seriesIds.add(m.series.id);
       for (const a of m?.authors ?? []) authors.add(a.name);
+      const t = m?.series?.property.title || m?.title.main;
+      if (t) titles.add(normTitle(t));
     }
   }
-  return { seriesIds, bookIds, authors };
+  return { seriesIds, bookIds, authors, titles };
 }
 
 export interface NewReleaseResult {
@@ -124,8 +138,12 @@ export async function buildNewReleases(
       .map((a) => a.name);
     const allAuthorNames = (b.authors ?? []).map((a) => a.name);
 
+    // owned-series match: serial_id (rarely aligns with book-api series.id),
+    // owned book id, or normalized-title match (covers the id-space gap)
     const isOwned =
-      (serialId && owned.seriesIds.has(serialId)) || owned.bookIds.has(id);
+      (serialId && owned.seriesIds.has(serialId)) ||
+      owned.bookIds.has(id) ||
+      owned.titles.has(normTitle(b.serial?.title || b.title));
     const byMyAuthor = allAuthorNames.some((n) => owned.authors.has(n));
     const highlight = isOwned ? "owned" : byMyAuthor ? "author" : null;
     const info = (serialId && ratings.get(serialId)) || ratings.get(id);
