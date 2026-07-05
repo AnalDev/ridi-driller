@@ -199,9 +199,9 @@ describe("applyView + SORT_OPTIONS", () => {
       expect(opts("authorNew")).not.toContain(bad);
       expect(opts("newRelease")).not.toContain(bad);
     }
-    // 신간은 발매일 정렬 가능, 미구매작은 불가(발매일 데이터 없음)
+    // 신간/미구매작은 발매일 정렬 가능
     expect(opts("newRelease")).toContain("publishDate");
-    expect(opts("authorNew")).not.toContain("publishDate");
+    expect(opts("authorNew")).toContain("publishDate");
     // score/rating/title은 모든 탭 공통
     for (const tab of ["newVolume", "unread", "finished", "authorNew", "newRelease"]) {
       expect(opts(tab)).toEqual(expect.arrayContaining(["score", "rating", "title"]));

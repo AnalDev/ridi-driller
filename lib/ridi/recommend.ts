@@ -305,6 +305,7 @@ export function buildRecommendations(input: RecommendInput): RecommendResult {
     const isAdult = (b.age_limit ?? 0) >= 19;
     const isMagazine = isMagazineSearch(b);
     const isSetbook = !!b.is_setbook;
+    const authorMeta = meta.get(b.b_id);
     const owns = authorOwnedCount.get(name) ?? 1;
     authorNewMap.set(key, {
       kind: "authorNew",
@@ -323,6 +324,8 @@ export function buildRecommendations(input: RecommendInput): RecommendResult {
       isCompleted: !!b.is_series_complete,
       isSetbook,
       rating: b.buyer_rating_score,
+      publishDate: authorMeta?.publish?.ebook_publish,
+      publisher: authorMeta?.publisher?.name,
       storeUrl: storeUrl(b.b_id),
       score:
         owns * 10 +

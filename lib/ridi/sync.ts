@@ -206,6 +206,12 @@ export async function runSync(
   await enrichMissing(meta, readBookIds, emit);
 
   recs = buildRecommendations({ units, meta, lastRead, authorBooks, ratings });
+  await enrichMissing(
+    meta,
+    recs.authorNew.map((r) => r.bId),
+    emit,
+  );
+  recs = buildRecommendations({ units, meta, lastRead, authorBooks, ratings });
 
   await saveRaw(sid, {
     syncedAt: Date.now(),

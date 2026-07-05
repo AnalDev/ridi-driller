@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { Recommendation } from "@/lib/ridi/types";
 
 const KIND_LABEL: Record<Recommendation["kind"], string> = {
@@ -57,12 +58,11 @@ export default function BookCard({ item }: { item: CardItem }) {
       className={`group flex flex-col overflow-hidden rounded-xl bg-neutral-900 transition hover:-translate-y-0.5 ${ring}`}
     >
       <div className="relative aspect-[2/3] w-full bg-neutral-800">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={item.cover}
-          srcSet={`${item.cover} 480w, ${item.coverHi} 960w`}
+        <Image
+          src={item.coverHi || item.cover}
           sizes="(max-width: 640px) 45vw, (max-width: 1024px) 25vw, 16vw"
           alt={item.title}
+          fill
           loading="lazy"
           className="h-full w-full object-cover"
           onError={(e) => {

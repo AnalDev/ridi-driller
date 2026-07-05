@@ -201,6 +201,25 @@ describe("signal 3 — author's other works", () => {
     expect(out.authorNew).toHaveLength(1);
   });
 
+  it("attaches publish date from enriched book metadata", () => {
+    const authorBooks = new Map<string, SearchAuthorBook[]>([
+      ["작가A", [searchBook({ b_id: "new1", series_id: "S2", title: "신작하나" })]],
+    ]);
+    const newMeta = meta({
+      id: "new1",
+      publish: { ebook_publish: "2026-07-01T00:00:00+09:00" },
+    });
+    const out = run({
+      ...base(),
+      meta: new Map([
+        ["rep", owned],
+        ["new1", newMeta],
+      ]),
+      authorBooks,
+    });
+    expect(out.authorNew[0].publishDate).toBe("2026-07-01T00:00:00+09:00");
+  });
+
   it("merges setbooks: a regular edition wins over the 세트 of the same title", () => {
     const authorBooks = new Map<string, SearchAuthorBook[]>([
       [

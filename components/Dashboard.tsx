@@ -33,6 +33,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "authorNew", label: "작가 미구매작" },
 ];
 const CACHE_KEY = "ridi-driller-snapshot-v4";
+const READING_WARNING_HIDDEN_KEY = "ridi-driller-hide-reading-warning";
 
 function timeAgo(ts: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
@@ -58,6 +59,11 @@ export default function Dashboard({
   const [tab, setTab] = useState<TabKey>("newVolume");
   const [syncing, setSyncing] = useState(false);
   const [progress, setProgress] = useState<SyncProgress | null>(null);
+  const [readingWarningClosed, setReadingWarningClosed] = useState(false);
+  const [readingWarningHidden, setReadingWarningHidden] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem(READING_WARNING_HIDDEN_KEY) === "1";
+  });
   const esRef = useRef<EventSource | null>(null);
 
   const applySnapshot = useCallback((s: Snapshot) => {
@@ -111,6 +117,20 @@ export default function Dashboard({
       es.close();
     });
   }
+
+  function hideReadingWarningPermanently() {
+    setReadingWarningHidden(true);
+    try {
+      localStorage.setItem(READING_WARNING_HIDDEN_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const showReadingWarning =
+    (tab === "unread" || tab === "finished") &&
+    !readingWarningClosed &&
+    !readingWarningHidden;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -213,9 +233,28 @@ export default function Dashboard({
             ))}
           </div>
 
-          {(tab === "unread" || tab === "finished") && (
+          {showReadingWarning && (
             <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-xs leading-relaxed text-neutral-400">
-              <p className="font-medium text-amber-300">⚠️ 읽기 상태의 정확한 한계</p>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <p className="font-medium text-amber-300">⚠️ 읽기 상태의 정확한 한계</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={hideReadingWarningPermanently}
+                    className="text-neutral-500 hover:text-amber-200"
+                  >
+                    다시는 안 보기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReadingWarningClosed(true)}
+                    className="rounded border border-white/10 px-2 py-0.5 text-neutral-400 hover:bg-white/5 hover:text-neutral-200"
+                    aria-label="읽기 상태 안내 닫기"
+                  >
+                    닫기
+                  </button>
+                </div>
+              </div>
               <p className="mt-1">
                 리디는 시리즈별로{" "}
                 <b className="text-neutral-200">&lsquo;가장 최근에 연 권&rsquo; 딱 하나</b>(과 그 시각)만
