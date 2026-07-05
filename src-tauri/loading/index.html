@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>리디 드릴러</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #0a0a0a;
+        color: #d4d4d4;
+        font-family: -apple-system, "Segoe UI", sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .box {
+        text-align: center;
+      }
+      .spin {
+        width: 28px;
+        height: 28px;
+        margin: 0 auto 14px;
+        border: 3px solid #262626;
+        border-top-color: #10b981;
+        border-radius: 50%;
+        animation: s 0.8s linear infinite;
+      }
+      @keyframes s {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      h1 {
+        font-size: 16px;
+        font-weight: 700;
+        color: #fff;
+        margin: 0 0 4px;
+      }
+      p {
+        font-size: 13px;
+        color: #737373;
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="box">
+      <div class="spin"></div>
+      <h1>리디 드릴러</h1>
+      <p>로컬 서버 시작 중…</p>
+    </div>
+  </body>
+</html>

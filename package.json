@@ -10,11 +10,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "tauri": "tauri",
-    "app:dev": "tauri dev"
+    "app:dev": "tauri dev",
+    "build:sidecar": "next build && node scripts/assemble-server.mjs",
+    "app:build": "tauri build"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-http": "^2.5.9",
+    "@vercel/analytics": "^2.0.1",
     "next": "16.2.10",
     "p-limit": "^7.3.0",
     "react": "19.2.4",
