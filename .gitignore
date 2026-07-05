@@ -43,3 +43,7 @@ next-env.d.ts
 # app data / secrets
 /data
 .env
+
+# tauri
+/src-tauri/target
+/src-tauri/gen

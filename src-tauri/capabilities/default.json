@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "리디 드릴러 데스크톱 권한",
+  "windows": ["main", "ridi-login"],
+  "permissions": ["core:default", "shell:allow-open"]
+}

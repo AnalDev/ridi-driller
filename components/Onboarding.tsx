@@ -1,6 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+const isTauri = () =>
+  typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+async function tauriInvoke<T>(cmd: string): Promise<T> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<T>(cmd);
+}
 
 // Accept either the raw ridi-at value, or a cookie JSON export (Cookie-Editor /
 // EditThisCookie format: array of {name,value}), or a {"ridi-at": "..."} object.
@@ -30,14 +38,12 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [agree, setAgree] = useState(false);
+  const [desktop, setDesktop] = useState(false);
+  const [tauriBusy, setTauriBusy] = useState<null | "opening" | "fetching">(null);
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    const token = extractRidiAt(ridiAt);
-    if (!token) {
-      setError("ridi-at 값을 찾지 못했습니다. 토큰 원문 또는 ridi-at이 포함된 쿠키 JSON을 붙여넣으세요.");
-      return;
-    }
+  useEffect(() => setDesktop(isTauri()), []);
+
+  async function loginWithToken(token: string) {
     setLoading(true);
     setError(null);
     try {
@@ -54,6 +60,46 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function openRidiLogin() {
+    setError(null);
+    setTauriBusy("opening");
+    try {
+      await tauriInvoke("open_ridi_login");
+    } catch {
+      setError("로그인 창을 열지 못했습니다.");
+    } finally {
+      setTauriBusy(null);
+    }
+  }
+
+  async function grabCookieAndLogin() {
+    setTauriBusy("fetching");
+    setError(null);
+    try {
+      const token = await tauriInvoke<string | null>("get_ridi_cookie");
+      if (!token) {
+        setError("아직 로그인이 안 된 것 같아요. 리디 로그인 창에서 로그인 후 다시 시도하세요.");
+        return;
+      }
+      await tauriInvoke("close_ridi_login").catch(() => {});
+      await loginWithToken(token);
+    } catch {
+      setError("쿠키를 가져오지 못했습니다.");
+    } finally {
+      setTauriBusy(null);
+    }
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const token = extractRidiAt(ridiAt);
+    if (!token) {
+      setError("ridi-at 값을 찾지 못했습니다. 토큰 원문 또는 ridi-at이 포함된 쿠키 JSON을 붙여넣으세요.");
+      return;
+    }
+    await loginWithToken(token);
   }
 
   return (
@@ -96,6 +142,33 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
           <b className="text-emerald-300">4.</b> 탭·검색·정렬·필터로 다음에 읽을 책을 고르기. 이후엔 <b>빠른 업데이트</b>로 증분 반영
         </li>
       </ol>
+
+      {/* desktop app: one-click auto cookie */}
+      {desktop && (
+        <div className="mt-6 rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-4">
+          <h2 className="text-sm font-bold text-emerald-300">데스크톱 앱 · 자동 로그인</h2>
+          <p className="mt-1 text-xs text-neutral-400">
+            리디북스에 로그인만 하면 앱이 <code className="text-emerald-300">ridi-at</code>을 자동으로 가져옵니다. 복붙 필요 없음.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              onClick={openRidiLogin}
+              disabled={tauriBusy !== null}
+              className="rounded-lg bg-neutral-800 px-3 py-2 text-sm text-neutral-100 hover:bg-neutral-700 disabled:opacity-50"
+            >
+              {tauriBusy === "opening" ? "여는 중…" : "① 리디북스 로그인 창 열기"}
+            </button>
+            <button
+              onClick={grabCookieAndLogin}
+              disabled={tauriBusy !== null || loading}
+              className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-neutral-950 hover:bg-emerald-400 disabled:opacity-50"
+            >
+              {tauriBusy === "fetching" || loading ? "가져오는 중…" : "② 로그인 완료 · 쿠키 가져오기"}
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-neutral-500">아래 수동 방식은 안 쓰셔도 됩니다.</p>
+        </div>
+      )}
 
       {/* SECURITY — prominent warning */}
       <div className="mt-6 rounded-xl border border-red-500/40 bg-red-500/5 p-4">
