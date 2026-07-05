@@ -191,10 +191,11 @@ export function buildRecommendations(input: RecommendInput): RecommendResult {
       }
     }
 
-    // ---- signal 2/3: reading status, tracked as 읽음(R) / 보유(O) / 발매(T) ----
-    // T = paid released volumes (체험판 제외); missing(미보유) = T - O.
-    // A series is "다 읽음" only when read reaches the last released volume,
-    // i.e. owns everything (missing 0) AND read the latest owned volume.
+    // ---- signal 2/3: reading status ----
+    // IMPORTANT: RIDI only exposes the *most recently read* book per series
+    // (by timestamp) — NOT the furthest volume reached. So `readVol` means
+    // "the volume you last opened", which can go DOWN if you re-read an earlier
+    // volume. We therefore label it "최근 읽은 권", not "N권까지 읽음".
     const last = s?.id ? lastRead.get(s.id) : null;
     const total = availableCount(m); // T
     const owned = u.unit_count; // O
@@ -216,8 +217,8 @@ export function buildRecommendations(input: RecommendInput): RecommendResult {
         cover: coverUrl(u.b_id, "large"),
         coverHi: coverUrl(u.b_id, "xxlarge"),
         reason: readVol
-          ? `읽음 ${readVol} · 보유 ${owned} · 발매 ${total}권 (이어읽기)`
-          : `이어읽기 · 보유 ${owned} · 발매 ${total}권`,
+          ? `최근 읽은 권 ${readVol} · 보유 ${owned} / 발매 ${total}권`
+          : `읽던 중 · 보유 ${owned} / 발매 ${total}권`,
         lastReadBId: last.bookId,
         lastReadAt: last.lastReadAt,
         storeUrl: storeUrl(u.b_id),

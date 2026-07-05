@@ -131,7 +131,7 @@ describe("signal 2 — unread / continue", () => {
     expect(r.ownedCount).toBe(7);
     expect(r.totalCount).toBe(7);
     expect(r.lastReadAt).toBe("2025-09-12T04:22:58+09:00");
-    expect(r.reason).toContain("읽음 6");
+    expect(r.reason).toContain("최근 읽은 권 6");
   });
 
   it("never opened: last-read null → 미독", () => {

@@ -211,6 +211,15 @@ export default function Dashboard({
             ))}
           </div>
 
+          {(tab === "unread" || tab === "finished") && (
+            <p className="mt-3 rounded-lg border border-white/10 bg-neutral-900/60 px-3 py-2 text-xs text-neutral-400">
+              ℹ️ 읽기 상태는 리디의 <b className="text-neutral-300">&lsquo;마지막으로 읽은 권&rsquo;</b>{" "}
+              하나만 기준입니다(리디가 최고 도달 권을 제공하지 않음). 그래서{" "}
+              <b className="text-neutral-300">앞 권을 다시 열면 &lsquo;최근 읽은 권&rsquo;이 그 권으로 내려가</b>,
+              완독한 시리즈가 &lsquo;안 읽은 책&rsquo;으로 보일 수 있어요.
+            </p>
+          )}
+
           <ResultBrowser
             key={tab}
             items={snap.recommendations[tab] ?? []}
