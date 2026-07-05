@@ -39,6 +39,11 @@ export const defaultView = (): ViewState => ({
   sortDir: "desc",
 });
 
+export const defaultViewForTab = (tab: string): ViewState => ({
+  ...defaultView(),
+  ...(tab === "newVolume" ? { sortKey: "publishDate" as const, sortDir: "desc" as const } : {}),
+});
+
 const time = (s?: string | null) => (s ? Date.parse(s) || 0 : 0);
 
 function matchTri(state: TriState, flag: boolean): boolean {

@@ -5,6 +5,7 @@ import {
   applyView,
   facets,
   defaultView,
+  defaultViewForTab,
   SORT_OPTIONS,
   type ViewState,
 } from "@/lib/view";
@@ -164,6 +165,17 @@ describe("facets", () => {
 });
 
 describe("applyView + SORT_OPTIONS", () => {
+  it("defaults new-volume recommendations to release date order", () => {
+    expect(defaultViewForTab("newVolume")).toMatchObject({
+      sortKey: "publishDate",
+      sortDir: "desc",
+    });
+    expect(defaultViewForTab("unread")).toMatchObject({
+      sortKey: "score",
+      sortDir: "desc",
+    });
+  });
+
   it("filters then sorts in one pass", () => {
     const list = [
       rec({ title: "keep-hi", rating: 5.0, contentType: "만화" }),

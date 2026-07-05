@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import ResultBrowser from "@/components/ResultBrowser";
+import SourceCodeLink from "@/components/SourceCodeLink";
 import type { Recommendation } from "@/lib/ridi/types";
 
 interface Genre {
@@ -73,7 +74,8 @@ export default function NewReleasesPage() {
             <span className="text-sky-300">내 작가 {authorCount}</span> 강조
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <SourceCodeLink />
           <button
             onClick={() => load(genre, true)}
             disabled={loading}

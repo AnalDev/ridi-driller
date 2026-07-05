@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import BookCard, { type CardItem } from "./BookCard";
 import FilterBar from "./FilterBar";
-import { applyView, defaultView, facets, type ViewState } from "@/lib/view";
+import { applyView, defaultViewForTab, facets, type ViewState } from "@/lib/view";
 import type { Recommendation } from "@/lib/ridi/types";
 
 const PAGE_SIZE = 60;
@@ -68,7 +68,7 @@ export default function ResultBrowser({
   tab: string;
   csvName: string;
 }) {
-  const [view, setView] = useState<ViewState>(defaultView);
+  const [view, setView] = useState<ViewState>(() => defaultViewForTab(tab));
   const [pageMode, setPageMode] = useState<"scroll" | "more" | "pages">("scroll");
   const [page, setPage] = useState(1);
   const [visible, setVisible] = useState(PAGE_SIZE);
