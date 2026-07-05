@@ -244,6 +244,137 @@ describe("signal 3 — author's other works", () => {
   });
 });
 
+describe("체험판 (trial) exclusion + paid-count", () => {
+  it("uses paid book count so a free 체험판 does not create a false missing volume", () => {
+    const m = meta({
+      id: "rep",
+      series: {
+        id: "S",
+        volume: 7,
+        property: seriesProp({ opened_book_count: 8, opened_last_volume_id: "V" }),
+        price_info: { buy: { total_book_count: 7 } },
+      },
+    });
+    const out = run({ units: [unit({ b_id: "rep", unit_count: 7 })], meta: new Map([["rep", m]]) });
+    expect(out.newVolume).toHaveLength(0); // owns all 7 paid; +1 opened is a 체험판
+  });
+
+  it("still flags genuinely missing paid volumes", () => {
+    const m = meta({
+      id: "rep",
+      series: {
+        id: "S",
+        volume: 5,
+        property: seriesProp({ opened_book_count: 8, opened_last_volume_id: "V" }),
+        price_info: { buy: { total_book_count: 7 } },
+      },
+    });
+    const out = run({ units: [unit({ b_id: "rep", unit_count: 6 })], meta: new Map([["rep", m]]) });
+    expect(out.newVolume).toHaveLength(1);
+    expect(out.newVolume[0].missing).toBe(1); // paid 7 - owned 6
+    expect(out.newVolume[0].totalCount).toBe(7);
+  });
+
+  it("falls back to opened_book_count when price info is absent", () => {
+    const m = meta({
+      id: "rep",
+      series: { id: "S", volume: 5, property: seriesProp({ opened_book_count: 8, opened_last_volume_id: "V" }) },
+    });
+    const out = run({ units: [unit({ b_id: "rep", unit_count: 5 })], meta: new Map([["rep", m]]) });
+    expect(out.newVolume[0].missing).toBe(3);
+  });
+
+  it("skips a unit that is itself a 체험판 (property flag or title)", () => {
+    const byProp = meta({
+      id: "t1",
+      property: { is_trial: true },
+      series: { id: "S", volume: 1, property: seriesProp({ opened_book_count: 3, opened_last_volume_id: "x" }) },
+    });
+    const byTitle = meta({
+      id: "t2",
+      title: { main: "[체험판] 어떤 만화" },
+      series: { id: "S2", volume: 1, property: seriesProp({ opened_book_count: 3, opened_last_volume_id: "y" }) },
+    });
+    const out = run({
+      units: [unit({ b_id: "t1", unit_count: 1 }), unit({ b_id: "t2", unit_count: 1 })],
+      meta: new Map([["t1", byProp], ["t2", byTitle]]),
+    });
+    expect(out.newVolume).toHaveLength(0);
+    expect(out.unread).toHaveLength(0);
+    expect(out.finished).toHaveLength(0);
+  });
+
+  it("excludes 체험판 titles from author works", () => {
+    const owned = meta({
+      id: "rep",
+      series: { id: "S1", volume: 1, property: seriesProp({ title: "보유작" }) },
+      authors: [{ id: 1, name: "작가A", role: "author" }],
+    });
+    const authorBooks = new Map([
+      [
+        "작가A",
+        [searchBook({ b_id: "t", title: "[체험판] 신작" }), searchBook({ b_id: "n", series_id: "S2", title: "진짜신작" })],
+      ],
+    ]);
+    const out = run({ units: [unit({ b_id: "rep", unit_count: 1 })], meta: new Map([["rep", owned]]), authorBooks });
+    expect(out.authorNew.map((r) => r.bId)).toEqual(["n"]);
+  });
+});
+
+describe("세트 / 합본 handling", () => {
+  it("does not flag missing volumes for a 완결 세트 the user owns", () => {
+    const m = meta({
+      id: "set",
+      title: { main: "[완결 세트] 대작 전권" },
+      series: { id: "S", volume: 1, property: seriesProp({ opened_book_count: 20, opened_last_volume_id: "L" }) },
+    });
+    const out = run({ units: [unit({ b_id: "set", unit_count: 1 })], meta: new Map([["set", m]]) });
+    expect(out.newVolume).toHaveLength(0);
+  });
+});
+
+describe("다 읽은 책 (finished)", () => {
+  it("lists a series read up to the latest owned volume", () => {
+    const rep = meta({
+      id: "rep",
+      series: {
+        id: "S",
+        volume: 7,
+        property: seriesProp({ opened_book_count: 7 }),
+        price_info: { buy: { total_book_count: 7 } },
+      },
+    });
+    const out = run({
+      units: [unit({ b_id: "rep", unit_count: 7 })],
+      meta: new Map([["rep", rep]]),
+      lastRead: new Map([["S", { bookId: "rep", lastReadAt: "2025-09-12T00:00:00Z" }]]),
+    });
+    expect(out.finished).toHaveLength(1);
+    expect(out.unread).toHaveLength(0);
+    expect(out.finished[0].lastReadAt).toBe("2025-09-12T00:00:00Z");
+  });
+
+  it("notes new volumes when finished but more paid volumes are out", () => {
+    const m = meta({
+      id: "rep",
+      series: {
+        id: "S",
+        volume: 5,
+        property: seriesProp({ opened_book_count: 8, opened_last_volume_id: "V" }),
+        price_info: { buy: { total_book_count: 7 } },
+      },
+    });
+    const out = run({
+      units: [unit({ b_id: "rep", unit_count: 5 })],
+      meta: new Map([["rep", m]]),
+      lastRead: new Map([["S", { bookId: "rep", lastReadAt: "2025-01-01T00:00:00Z" }]]),
+    });
+    expect(out.finished).toHaveLength(1);
+    expect(out.finished[0].reason).toContain("새 2권"); // paid 7 - owned 5
+    expect(out.newVolume).toHaveLength(1); // also surfaced as missing volumes
+  });
+});
+
 describe("tag + rating harvest", () => {
   it("attaches tags/rating from an author's search results to the owned series rec", () => {
     const m = meta({

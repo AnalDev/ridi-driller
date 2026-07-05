@@ -5,6 +5,9 @@ import {
   categoryNameOf,
   topCategoryOf,
   isMagazineSearch,
+  isTrial,
+  isSet,
+  isTrialTitle,
 } from "@/lib/ridi/classify";
 import { meta, searchBook } from "./factories";
 
@@ -57,6 +60,28 @@ describe("topCategoryOf / categoryNameOf", () => {
   });
   it("returns the leaf category name", () => {
     expect(categoryNameOf(cat(1527, "판타지/SF"))).toBe("판타지/SF");
+  });
+});
+
+describe("isTrial / isSet", () => {
+  it("detects 체험판 by property flag", () => {
+    expect(isTrial(meta({ property: { is_trial: true } }))).toBe(true);
+  });
+  it("detects 체험판 by title", () => {
+    expect(isTrial(meta({ title: { main: "[체험판] 어떤 책" } }))).toBe(true);
+    expect(isTrialTitle("[체험판] 어떤 책")).toBe(true);
+  });
+  it("non-trial book is not a trial", () => {
+    expect(isTrial(meta({ title: { main: "정식판" } }))).toBe(false);
+    expect(isTrialTitle("정식판")).toBe(false);
+  });
+  it("detects 완결 세트 / 특별세트 / 합본", () => {
+    expect(isSet(meta({ title: { main: "[완결 세트] 대작" } }))).toBe(true);
+    expect(isSet(meta({ title: { main: "[특별세트] 대작" } }))).toBe(true);
+    expect(isSet(meta({ title: { main: "대작 합본판" } }))).toBe(true);
+  });
+  it("normal single volume is not a set", () => {
+    expect(isSet(meta({ title: { main: "대작 3권" } }))).toBe(false);
   });
 });
 
