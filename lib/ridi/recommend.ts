@@ -174,69 +174,88 @@ export function buildRecommendations(input: RecommendInput): RecommendResult {
       }
     }
 
-    // ---- signal 2/3: reading status → unread / continue / finished ----
+    // ---- signal 2/3: reading status, tracked as 읽음(R) / 보유(O) / 발매(T) ----
+    // T = paid released volumes (체험판 제외); missing(미보유) = T - O.
+    // A series is "다 읽음" only when read reaches the last released volume,
+    // i.e. owns everything (missing 0) AND read the latest owned volume.
     const last = s?.id ? lastRead.get(s.id) : null;
-    const available = availableCount(m);
-    const missing = Math.max(0, available - u.unit_count);
+    const total = availableCount(m); // T
+    const owned = u.unit_count; // O
+    const missing = Math.max(0, total - owned); // 미보유
+    const ownedVol = m.series?.volume ?? owned; // latest owned volume number
+    const readVol = last
+      ? (meta.get(last.bookId)?.series?.volume ?? (last.bookId === u.b_id ? ownedVol : undefined))
+      : 0;
+    const counts = { lastReadVolume: readVol, ownedCount: owned, totalCount: total, missing };
+
     if (last && last.bookId !== u.b_id) {
-      // opened but not the latest owned volume → 이어읽기
-      const readVol = meta.get(last.bookId)?.series?.volume;
+      // opened, but not the latest owned volume → 이어읽기 (owned volumes unread)
       unread.push({
         ...base,
+        ...counts,
         kind: "unread",
         bId: u.b_id,
         title,
         cover: coverUrl(u.b_id, "large"),
         coverHi: coverUrl(u.b_id, "xxlarge"),
         reason: readVol
-          ? `${readVol}권까지 읽음 · 보유 ${u.unit_count}권 (이어읽기)`
-          : "읽다 만 시리즈 · 이어서 볼 권이 있어요",
+          ? `읽음 ${readVol} · 보유 ${owned} · 발매 ${total}권 (이어읽기)`
+          : `이어읽기 · 보유 ${owned} · 발매 ${total}권`,
         lastReadBId: last.bookId,
         lastReadAt: last.lastReadAt,
-        lastReadVolume: readVol,
-        ownedCount: u.unit_count,
-        totalCount: available,
-        missing,
         storeUrl: storeUrl(u.b_id),
         score: 1000 + recencyBoost(u.purchase_date, 200),
       });
-    } else if (last && last.bookId === u.b_id) {
-      // read up to the latest owned volume → 다 읽은 책
+    } else if (last && last.bookId === u.b_id && missing === 0) {
+      // read the latest owned volume AND owns every released paid volume → 다 읽음
       finished.push({
         ...base,
+        ...counts,
         kind: "finished",
+        bId: u.b_id,
+        title,
+        cover: coverUrl(u.b_id, "large"),
+        coverHi: coverUrl(u.b_id, "xxlarge"),
+        reason: base.isCompleted
+          ? `완독 · 발매 ${total}권 (완결)`
+          : `현재까지 완독 · 발매 ${total}권 (연재중)`,
+        lastReadBId: last.bookId,
+        lastReadAt: last.lastReadAt,
+        storeUrl: storeUrl(u.b_id),
+        score: recencyBoost(last.lastReadAt, 300),
+      });
+    } else if (last && last.bookId === u.b_id && missing > 0) {
+      // read everything owned, but unowned released volumes remain unread → 안 읽은 책
+      unread.push({
+        ...base,
+        ...counts,
+        kind: "unread",
+        bId: s?.property.opened_last_volume_id || u.b_id,
+        title,
+        cover: coverUrl(u.b_id, "large"),
+        coverHi: coverUrl(u.b_id, "xxlarge"),
+        reason: `보유분(${owned}) 완독 · 미보유 ${missing}권 미독 (발매 ${total})`,
+        lastReadBId: last.bookId,
+        lastReadAt: last.lastReadAt,
+        storeUrl: storeUrl(s?.property.opened_last_volume_id || u.b_id),
+        score: 400 + recencyBoost(last.lastReadAt, 100),
+      });
+    } else if (!last) {
+      // never opened
+      const age = daysSince(u.purchase_date);
+      unread.push({
+        ...base,
+        ...counts,
+        kind: "unread",
         bId: u.b_id,
         title,
         cover: coverUrl(u.b_id, "large"),
         coverHi: coverUrl(u.b_id, "xxlarge"),
         reason:
           missing > 0
-            ? `보유분 다 읽음 · 새 ${missing}권 나옴`
-            : base.isCompleted
-              ? "완독 · 완결 시리즈"
-              : "보유분 다 읽음",
-        lastReadBId: last.bookId,
-        lastReadAt: last.lastReadAt,
-        ownedCount: u.unit_count,
-        totalCount: available,
-        missing,
-        storeUrl: storeUrl(u.b_id),
-        score: recencyBoost(last.lastReadAt, 300),
-      });
-    } else if (!last) {
-      const age = daysSince(u.purchase_date);
-      unread.push({
-        ...base,
-        kind: "unread",
-        bId: u.b_id,
-        title,
-        cover: coverUrl(u.b_id, "large"),
-        coverHi: coverUrl(u.b_id, "xxlarge"),
-        reason: age < 90 ? "최근에 샀는데 아직 안 읽었어요" : "소장 중 · 아직 펼쳐보지 않음",
+            ? `아직 안 읽음 · 보유 ${owned} · 발매 ${total}권 (미보유 ${missing})`
+            : `아직 안 읽음 · 보유 ${owned}권`,
         lastReadAt: null,
-        ownedCount: u.unit_count,
-        totalCount: available,
-        missing,
         storeUrl: storeUrl(u.b_id),
         score: Math.max(0, 300 - age),
       });
@@ -276,7 +295,7 @@ export function buildRecommendations(input: RecommendInput): RecommendResult {
       cover: coverUrl(b.b_id, "large"),
       coverHi: coverUrl(b.b_id, "xxlarge"),
       authors: [name],
-      reason: `내가 읽은 작가 "${name}"의 다른 작품${b.is_series_complete ? " (완결)" : ""}${isSetbook ? " · 세트" : ""}`,
+      reason: `내가 읽은 작가 "${name}"의 미구매 작품${b.is_series_complete ? " (완결)" : ""}${isSetbook ? " · 세트" : ""}`,
       contentType: contentTypeOfSearch(b),
       categoryName: b.category_name,
       topCategory: b.parent_category_name,

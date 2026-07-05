@@ -130,10 +130,10 @@ export const SORT_OPTIONS: { key: SortKey; label: string; tabs?: string[] }[] = 
   { key: "score", label: "추천순" },
   { key: "publishDate", label: "발매일" },
   { key: "rating", label: "별점" },
-  { key: "missing", label: "미보유 권수", tabs: ["newVolume"] },
+  { key: "missing", label: "미보유 권수", tabs: ["newVolume", "unread"] },
   { key: "owned", label: "보유 권수" },
-  { key: "lastReadVolume", label: "읽은 권수", tabs: ["unread"] },
-  { key: "lastReadAt", label: "최종 읽은 시각", tabs: ["unread"] },
+  { key: "lastReadVolume", label: "읽은 권수", tabs: ["unread", "finished"] },
+  { key: "lastReadAt", label: "최종 읽은 시각", tabs: ["unread", "finished"] },
   { key: "purchaseDate", label: "구매일" },
   { key: "title", label: "제목" },
 ];

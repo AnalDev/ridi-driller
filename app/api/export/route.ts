@@ -9,7 +9,7 @@ const KIND_LABEL: Record<RecKind, string> = {
   newVolume: "미보유 신권",
   unread: "안 읽은 책",
   finished: "다 읽은 책",
-  authorNew: "작가 신작",
+  authorNew: "작가 미구매작",
   newRelease: "신간",
 };
 

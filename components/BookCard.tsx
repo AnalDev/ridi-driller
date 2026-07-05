@@ -4,7 +4,7 @@ const KIND_LABEL: Record<Recommendation["kind"], string> = {
   newVolume: "미보유 권",
   unread: "미독",
   finished: "완독",
-  authorNew: "작가 신작",
+  authorNew: "미구매작",
   newRelease: "신간",
 };
 

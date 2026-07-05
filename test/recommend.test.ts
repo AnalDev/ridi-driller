@@ -100,10 +100,15 @@ describe("signal 1 — missing volumes (newVolume)", () => {
 describe("signal 2 — unread / continue", () => {
   const repMeta = meta({
     id: "rep",
-    series: { id: "S1", volume: 7, property: seriesProp({ opened_book_count: 7 }) },
+    series: {
+      id: "S1",
+      volume: 7,
+      property: seriesProp({ opened_book_count: 7 }),
+      price_info: { buy: { total_book_count: 7 } },
+    },
   });
 
-  it("continue: last-read volume < owned, reports the volume + timestamp", () => {
+  it("continue: last-read volume < owned, reports read/owned/total + timestamp", () => {
     const read: BookMeta = meta({
       id: "read6",
       series: { id: "S1", volume: 6, property: seriesProp({ opened_book_count: 7 }) },
@@ -123,8 +128,10 @@ describe("signal 2 — unread / continue", () => {
     const r = out.unread[0];
     expect(r.lastReadBId).toBe("read6");
     expect(r.lastReadVolume).toBe(6);
+    expect(r.ownedCount).toBe(7);
+    expect(r.totalCount).toBe(7);
     expect(r.lastReadAt).toBe("2025-09-12T04:22:58+09:00");
-    expect(r.reason).toContain("6권까지 읽음");
+    expect(r.reason).toContain("읽음 6");
   });
 
   it("never opened: last-read null → 미독", () => {
@@ -354,7 +361,7 @@ describe("다 읽은 책 (finished)", () => {
     expect(out.finished[0].lastReadAt).toBe("2025-09-12T00:00:00Z");
   });
 
-  it("notes new volumes when finished but more paid volumes are out", () => {
+  it("read-all-owned but missing paid volumes → 안 읽은 책, NOT 다 읽은 책", () => {
     const m = meta({
       id: "rep",
       series: {
@@ -369,9 +376,13 @@ describe("다 읽은 책 (finished)", () => {
       meta: new Map([["rep", m]]),
       lastRead: new Map([["S", { bookId: "rep", lastReadAt: "2025-01-01T00:00:00Z" }]]),
     });
-    expect(out.finished).toHaveLength(1);
-    expect(out.finished[0].reason).toContain("새 2권"); // paid 7 - owned 5
-    expect(out.newVolume).toHaveLength(1); // also surfaced as missing volumes
+    // not finished — 미보유 2권(paid 7 - owned 5)이 남아있으므로
+    expect(out.finished).toHaveLength(0);
+    const u = out.unread[0];
+    expect(u).toBeDefined();
+    expect(u.missing).toBe(2);
+    expect(u.reason).toContain("미보유 2권");
+    expect(out.newVolume).toHaveLength(1); // also surfaced as 미보유 신권
   });
 });
 

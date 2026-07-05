@@ -29,9 +29,9 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "newVolume", label: "미보유 신권" },
   { key: "unread", label: "안 읽은 책" },
   { key: "finished", label: "다 읽은 책" },
-  { key: "authorNew", label: "작가 신작" },
+  { key: "authorNew", label: "작가 미구매작" },
 ];
-const CACHE_KEY = "ridi-driller-snapshot-v3";
+const CACHE_KEY = "ridi-driller-snapshot-v4";
 
 export default function Dashboard({
   count,
