@@ -2,12 +2,16 @@
 
 내 리디북스 서재를 분석해 **계속 읽게 만드는** 추천 웹앱. 소장한 모든 작품을 기반으로 세 가지를 찾아줍니다.
 
+배포: [ridi-driller.vercel.app](https://ridi-driller.vercel.app)
+
 | 탭 | 무엇을 찾나 | 판정 근거 |
 |---|---|---|
 | **미보유 신권** | 소장 시리즈 중 아직 안 산 권 | `unit_count`(보유) < `series.opened_book_count`(발매) |
 | **안 읽은 책** | 샀지만 안 읽은 / 읽다 만 시리즈 | reading-history **마지막 읽은 권** vs 보유 (아래 한계 참고) |
 | **작가 신작** | 내가 읽은 작가의 미보유 다른 작품 | 작가 검색 결과에서 보유 시리즈 제외 (특별/완결 세트 병합) |
 | **신간** (`/new-releases`) | 리디 코믹스 신간 | 내 보유 시리즈·내 작가 작품을 강조 표시 |
+| **도서 검색** (`/search`) | 알라딘·교보문고·리디 통합 검색 | 서점별 검색 결과를 제목·가격·포맷과 함께 표시 |
+| **무료 eBook** (`/search`) | 현재 판매가가 0원인 전자책 | 체험판·맛보기·미리보기·샘플 제외 |
 
 ### 필터 · 정렬 · 검색
 - **검색**: 제목·작가 텍스트 검색
@@ -47,6 +51,14 @@ npm run dev      # http://localhost:3000
 npm run build && npm start
 ```
 
+알라딘 검색을 포함하려면 서버 환경변수에 TTB Open API 키를 설정합니다. 교보문고와 리디 검색은 별도 키가 필요하지 않습니다.
+
+```bash
+ALADIN_TTB_KEY=your-ttb-key
+```
+
+무료 eBook 검색은 전자책이면서 현재 판매가가 명시적으로 0원인 결과만 포함합니다. 제목이나 원본 데이터에 체험판·맛보기·미리보기·샘플 표시가 있으면 제외하며, 각 서점의 검색 응답 변화로 일부 결과가 일시적으로 누락될 수 있습니다.
+
 1. 브라우저에서 ridibooks.com 로그인 → F12 → Application → Cookies → `https://ridibooks.com`
 2. `ridi-at` 값 복사 (Cloudflare에 막히면 `cf_clearance`도 함께)
 3. 앱 첫 화면에 붙여넣고 **서재 연결하기**
@@ -64,11 +76,12 @@ npm run build && npm start
 
 ## 스택
 
-Next.js 16 (App Router, TypeScript) · Tailwind CSS 4 · 파일 캐시 · SSE 진행률 스트리밍.
+Next.js 16 (App Router, TypeScript) · Tailwind CSS 4 · 파일 캐시 · SSE 진행률 스트리밍 · node-html-parser.
 
 ```
 lib/ridi/     client · library · books · reading · authors · recommend · sync
+lib/books/    알라딘 · 교보문고 · 리디 검색 어댑터와 무료 판정
 lib/          session(암호화) · cache
-app/api/      session · sync(SSE) · recommendations
-components/   Onboarding · Dashboard · BookCard
+app/api/      session · sync(SSE) · recommendations · books/search
+components/   Onboarding · Dashboard · BookCard · StoreSearch
 ```
