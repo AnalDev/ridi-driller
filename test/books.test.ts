@@ -52,7 +52,9 @@ describe("Kyobo search parser", () => {
   it("maps the explicit free flag to a zero-price ebook", () => {
     const html = `<div id="shopData_list"><li class="prod_item">
       <input class="result_checkbox" data-pid="E000000000001" data-bid="" data-name="정식 무료책" data-free-ysno="1">
-      <a class="prod_link" href="https://ebook-product.kyobobook.co.kr/dig/epd/ebook/E000000000001"></a>
+      <a class="prod_link" href="https://ebook-product.kyobobook.co.kr/dig/epd/ebook/E000000000001">
+        <span class="prod_thumb_box"><img data-kbbfn-bid="480D221085780"></span>
+      </a>
       <span id="cmdtName_E000000000001">정식 무료책</span>
       <div class="prod_author_group"><div class="auto_overflow_inner"><a class="author">홍길동</a></div></div>
     </li></div>`;
@@ -64,6 +66,7 @@ describe("Kyobo search parser", () => {
         title: "정식 무료책",
         authors: ["홍길동"],
         salePrice: 0,
+        coverUrl: "https://contents.kyobobook.co.kr/sih/fit-in/200x0/pdt/480D221085780.jpg",
       }),
     ]);
   });

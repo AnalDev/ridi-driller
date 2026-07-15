@@ -87,7 +87,6 @@ interface AladinItem {
 
 export function sanitizeAladinJson(value: string): string {
   return value
-    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
     .replace(/\\'/g, "'");
 }
@@ -171,6 +170,16 @@ function kyoboAuthors(item: HTMLElement): string[] {
   ];
 }
 
+function kyoboCoverUrl(item: HTMLElement): string | undefined {
+  const image = item.querySelector(".prod_thumb_box img");
+  const direct = image?.getAttribute("src") || image?.getAttribute("data-src");
+  if (direct) return direct;
+  const bookId = image?.getAttribute("data-kbbfn-bid");
+  if (bookId) return `https://contents.kyobobook.co.kr/sih/fit-in/200x0/pdt/${bookId}.jpg`;
+  const path = image?.getAttribute("data-kbbfn-img-path");
+  return path ? `https://contents.kyobobook.co.kr${path}` : undefined;
+}
+
 export function parseKyoboSearch(html: string): BookSearchItem[] {
   const root = parse(html);
   const items = root.querySelectorAll("li.prod_item");
@@ -204,7 +213,7 @@ export function parseKyoboSearch(html: string): BookSearchItem[] {
       authors: kyoboAuthors(item),
       publisher: cleanText(item.querySelector(".prod_publish a.text")?.text ?? "") || undefined,
       publishedAt: parseKoreanDate(item.querySelector(".prod_publish .date")?.text ?? ""),
-      coverUrl: item.querySelector(".prod_thumb_box img")?.getAttribute("src") ?? undefined,
+      coverUrl: kyoboCoverUrl(item),
       isbn13: validIsbn13(isbn) ? isbn : undefined,
       salePrice: isFree ? 0 : parseKrw(item.querySelector(".prod_price .price .val")?.text),
       listPrice: parseKrw(item.querySelector(".prod_price .price_normal .val")?.text),
