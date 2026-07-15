@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import SourceCodeLink from "./SourceCodeLink";
+import StoreSearchLink from "./StoreSearchLink";
 
 const isTauri = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -107,7 +108,10 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
     <div className="mx-auto max-w-2xl px-4 py-12">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-white">리디 드릴러</h1>
-        <SourceCodeLink />
+        <div className="flex flex-wrap items-center gap-2">
+          <StoreSearchLink />
+          <SourceCodeLink />
+        </div>
       </div>
       <p className="mt-3 rounded-lg border-l-2 border-emerald-500/60 bg-neutral-900/60 px-3 py-2 text-sm italic text-neutral-300">
         “내가 6천 권을 구매했지만, 쓰다가 화딱지만 쳐 나서 만들었다. 좀 정신차려라 ㄹㄷㅂㅅ”

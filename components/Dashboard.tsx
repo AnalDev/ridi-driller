@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import ResultBrowser from "./ResultBrowser";
 import SourceCodeLink from "./SourceCodeLink";
+import StoreSearchLink from "./StoreSearchLink";
 import type { Recommendation, SyncProgress } from "@/lib/ridi/types";
 
 interface Snapshot {
@@ -151,6 +152,7 @@ export default function Dashboard({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <SourceCodeLink />
+          <StoreSearchLink />
           <a
             href="/new-releases"
             className="rounded-lg border border-violet-500/40 px-3 py-2 text-sm font-medium text-violet-300 hover:bg-violet-500/10"

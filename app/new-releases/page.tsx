@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import ResultBrowser from "@/components/ResultBrowser";
 import SourceCodeLink from "@/components/SourceCodeLink";
+import StoreSearchLink from "@/components/StoreSearchLink";
 import type { Recommendation } from "@/lib/ridi/types";
 
 interface Genre {
@@ -76,6 +78,7 @@ export default function NewReleasesPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <SourceCodeLink />
+          <StoreSearchLink />
           <button
             onClick={() => load(genre, true)}
             disabled={loading}
@@ -83,9 +86,9 @@ export default function NewReleasesPage() {
           >
             {loading ? "불러오는 중…" : "새로고침"}
           </button>
-          <a href="/" className="rounded-lg px-3 py-2 text-sm text-neutral-400 hover:text-neutral-200">
+          <Link href="/" className="rounded-lg px-3 py-2 text-sm text-neutral-400 hover:text-neutral-200">
             ← 서재 분석
-          </a>
+          </Link>
         </div>
       </div>
 
