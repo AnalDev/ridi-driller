@@ -25,8 +25,11 @@ export async function GET(request: Request) {
   const sources = [...new Set(requestedSources)];
   const unknownSources = sources.filter((source) => !SOURCE_SET.has(source));
 
-  if (!query || query.length > 200) {
-    return NextResponse.json({ error: "검색어는 1~200자여야 합니다." }, { status: 400 });
+  if (query.length > 200 || (!query && !freeOnly)) {
+    return NextResponse.json(
+      { error: freeOnly ? "검색어는 200자 이하여야 합니다." : "검색어는 1~200자여야 합니다." },
+      { status: 400 },
+    );
   }
   if (!Number.isInteger(page) || page < 1 || page > 100) {
     return NextResponse.json({ error: "페이지는 1~100 사이의 정수여야 합니다." }, { status: 400 });

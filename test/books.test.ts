@@ -34,7 +34,9 @@ describe("free ebook classification", () => {
     "신작 맛보기",
     "도서 미리보기",
     "샘플북",
+    "무료 특별판",
     "작품 발췌본",
+    "신작 예고편",
     "연재 프롤로그",
     "어떤 이야기 1화",
     "English sample edition",
@@ -114,5 +116,69 @@ describe("store search", () => {
     });
     expect(result.books.map((item) => item.sourceItemId)).toEqual(["full"]);
     expect(result).toMatchObject({ errors: [], scanned: 2, hasMore: false });
+  });
+
+  it("browses the Ridi free catalog without a search term", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = new URL(String(input));
+      expect(url.origin + url.pathname).toBe("https://api.ridibooks.com/v2/category/books");
+      expect(url.searchParams.get("category_id")).toBe("0");
+      expect(url.searchParams.get("tab")).toBe("free-books");
+      return Response.json({
+        data: {
+          items: [
+            {
+              book: {
+                bookId: "full",
+                title: "정식 무료책",
+                authors: [{ name: "홍길동" }],
+                purchase: { salePrice: 0, fullPrice: 0 },
+                ratings: [{ rating: 5, count: 2 }],
+              },
+            },
+            {
+              book: {
+                bookId: "preview",
+                title: "신작 무료 특별판",
+                purchase: { salePrice: 0, fullPrice: 0 },
+              },
+            },
+            {
+              book: {
+                bookId: "paid",
+                title: "기간 한정 항목",
+                purchase: { salePrice: 1000, fullPrice: 1000 },
+              },
+            },
+            {
+              book: {
+                bookId: "trial",
+                title: "체험 도서",
+                trial: true,
+                purchase: { salePrice: 0, fullPrice: 0 },
+              },
+            },
+          ],
+        },
+      });
+    });
+
+    const result = await searchBookStores({
+      query: "",
+      sources: ["ridi"],
+      format: "ebook",
+      freeOnly: true,
+    });
+    expect(result.books).toEqual([
+      expect.objectContaining({
+        sourceItemId: "full",
+        title: "정식 무료책",
+        authors: ["홍길동"],
+        salePrice: 0,
+        rating: 5,
+        ratingCount: 2,
+      }),
+    ]);
+    expect(result).toMatchObject({ errors: [], scanned: 3, hasMore: false });
   });
 });

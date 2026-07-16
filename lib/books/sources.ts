@@ -11,6 +11,7 @@ import {
 
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36";
+const FREE_DISCOVERY_QUERY = "무료";
 
 type NextFetchInit = RequestInit & { next?: { revalidate: number } };
 
@@ -109,7 +110,7 @@ export async function searchAladin(options: BookSearchOptions): Promise<BookSear
         ttbkey: key,
         output: "js",
         Version: "20131101",
-        Query: options.query,
+        Query: options.query || FREE_DISCOVERY_QUERY,
         QueryType: "Keyword",
         SearchTarget: target,
         MaxResults: "20",
@@ -227,7 +228,7 @@ export async function searchKyobo(options: BookSearchOptions): Promise<BookSearc
   const format = options.freeOnly ? "ebook" : options.format ?? "all";
   const target = format === "ebook" ? "ebook" : format === "physical" ? "kyobo" : "total";
   const params = new URLSearchParams({
-    keyword: options.query,
+    keyword: options.query || FREE_DISCOVERY_QUERY,
     target,
     page: String(options.page ?? 1),
   });
@@ -242,8 +243,84 @@ interface RidiBookMetaSubset extends BookMeta {
   price_info?: { buy?: { price?: number; regular_price?: number } };
 }
 
+interface RidiFreeCatalogBook {
+  bookId: string;
+  title: string;
+  trial?: boolean;
+  authors?: { name: string }[];
+  publisher?: { name?: string };
+  publicationDate?: string;
+  cover?: { large?: string; xxlarge?: string };
+  isbn?: string | null;
+  purchase?: { salePrice?: number; fullPrice?: number };
+  ratings?: { rating: number; count: number }[];
+  categories?: { name?: string }[];
+}
+
+interface RidiFreeCatalogResponse {
+  data?: { items?: { book?: RidiFreeCatalogBook }[] };
+}
+
+function ridiCatalogRating(ratings: RidiFreeCatalogBook["ratings"]): {
+  rating?: number;
+  ratingCount?: number;
+} {
+  const ratingCount = ratings?.reduce((total, item) => total + item.count, 0) ?? 0;
+  if (ratingCount === 0) return {};
+  const weighted = ratings!.reduce((total, item) => total + item.rating * item.count, 0);
+  return { rating: weighted / ratingCount, ratingCount };
+}
+
+async function browseRidiFreeCatalog(options: BookSearchOptions): Promise<BookSearchItem[]> {
+  const size = 100;
+  const offset = (Math.max(1, options.page ?? 1) - 1) * size;
+  const params = new URLSearchParams({
+    category_id: "0",
+    tab: "free-books",
+    limit: String(size),
+    platform: "web",
+    offset: String(offset),
+    order_by: "popular",
+  });
+
+  let response: RidiFreeCatalogResponse;
+  try {
+    response = await ridiGet(`https://api.ridibooks.com/v2/category/books?${params}`, {
+      revalidate: 600,
+    });
+  } catch (error) {
+    throw new BookSourceError("ridi", "network", "리디 무료 도서 목록에 연결하지 못했습니다.", error);
+  }
+
+  return (response.data?.items ?? []).flatMap((item) => {
+    const book = item.book;
+    if (!book || book.trial) return [];
+    const ratings = ridiCatalogRating(book.ratings);
+    return [{
+      source: "ridi" as const,
+      sourceItemId: book.bookId,
+      url: `https://ridibooks.com/books/${book.bookId}`,
+      title: book.title,
+      format: "ebook" as const,
+      authors: [...new Set((book.authors ?? []).map((author) => author.name).filter(Boolean))],
+      publisher: book.publisher?.name,
+      publishedAt: book.publicationDate?.slice(0, 10),
+      coverUrl: book.cover?.xxlarge ?? book.cover?.large,
+      isbn13: book.isbn && validIsbn13(book.isbn) ? book.isbn : undefined,
+      salePrice: book.purchase?.salePrice,
+      listPrice: book.purchase?.fullPrice,
+      rating: ratings.rating,
+      ratingCount: ratings.ratingCount,
+      categories: (book.categories ?? []).map((category) => category.name).filter(
+        (category): category is string => Boolean(category),
+      ),
+    }];
+  });
+}
+
 export async function searchRidi(options: BookSearchOptions): Promise<BookSearchItem[]> {
   if (options.format === "physical") return [];
+  if (options.freeOnly && !options.query) return browseRidiFreeCatalog(options);
   const size = 20;
   const start = (Math.max(1, options.page ?? 1) - 1) * size;
   const params = new URLSearchParams({
