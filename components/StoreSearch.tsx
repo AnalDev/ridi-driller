@@ -142,7 +142,7 @@ export default function StoreSearch() {
 
   async function runSearch(nextPage: number, append: boolean) {
     const term = query.trim();
-    if (!term) {
+    if (!term && mode !== "free") {
       setMessage("검색어를 입력하세요.");
       return;
     }
@@ -256,7 +256,7 @@ export default function StoreSearch() {
               onChange={(event) => setQuery(event.target.value)}
               maxLength={200}
               autoComplete="off"
-              placeholder="제목, 작가, ISBN"
+              placeholder={mode === "free" ? "제목, 작가 (선택)" : "제목, 작가, ISBN"}
               className="h-11 w-full rounded-lg border border-white/10 bg-neutral-900 px-3 text-sm text-white outline-none placeholder:text-neutral-600 focus:border-sky-500/70"
             />
           </label>
@@ -265,7 +265,11 @@ export default function StoreSearch() {
             disabled={loading}
             className="h-11 shrink-0 rounded-lg bg-sky-400 px-5 text-sm font-semibold text-neutral-950 transition hover:bg-sky-300 disabled:opacity-50"
           >
-            {loading && page <= 1 ? "검색 중" : "검색"}
+            {loading && page <= 1
+              ? "검색 중"
+              : mode === "free" && !query.trim()
+                ? "둘러보기"
+                : "검색"}
           </button>
         </div>
 
