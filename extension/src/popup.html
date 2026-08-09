@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<style>
+  :root { --bg:#fff; --fg:#1a1a1a; --muted:#667; --line:#e6e6ec; --accent:#1f6feb; --card:#f6f7fb; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#16181d; --fg:#eceef3; --muted:#98a; --line:#2a2d36; --accent:#5b9bff; --card:#1d2027; }
+  }
+  * { box-sizing:border-box; }
+  body { width:340px; margin:0; font:13px/1.5 -apple-system,"Apple SD Gothic Neo",sans-serif; background:var(--bg); color:var(--fg); }
+  header { display:flex; align-items:center; gap:8px; padding:12px 14px; border-bottom:1px solid var(--line); }
+  header b { font-size:15px; }
+  .tag { font-size:11px; padding:1px 7px; border-radius:10px; background:var(--card); color:var(--muted); }
+  main { padding:14px; }
+  .status { display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:12.5px; }
+  .dot { width:8px; height:8px; border-radius:50%; background:#bbb; }
+  .dot.on { background:#2ea043; } .dot.off { background:#e5534b; }
+  button { width:100%; padding:9px; border:none; border-radius:8px; background:var(--accent); color:#fff; font-size:13.5px; cursor:pointer; font-weight:600; }
+  button:disabled { opacity:.5; cursor:default; }
+  button.sub { background:var(--card); color:var(--fg); border:1px solid var(--line); font-weight:500; margin-top:8px; }
+  .bar { height:6px; background:var(--line); border-radius:4px; overflow:hidden; margin:10px 0 4px; }
+  .bar > i { display:block; height:100%; background:var(--accent); width:0; transition:width .2s; }
+  .prog { font-size:11.5px; color:var(--muted); min-height:16px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; }
+  .stat { background:var(--card); border-radius:8px; padding:9px 10px; }
+  .stat .n { font-size:18px; font-weight:700; }
+  .stat .l { font-size:11px; color:var(--muted); }
+  .hint { font-size:11.5px; color:var(--muted); margin-top:10px; }
+  .err { color:#e5534b; font-size:12px; margin-top:8px; }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <b>📚 리디 드릴러</b>
+  <span class="tag">서재 인핸서</span>
+</header>
+<main>
+  <div class="status"><span class="dot" id="dot"></span><span id="status">세션 확인 중…</span></div>
+
+  <button id="analyze" disabled>서재 분석</button>
+  <div class="bar" id="barwrap" hidden><i id="bar"></i></div>
+  <div class="prog" id="prog"></div>
+  <div class="err" id="err"></div>
+
+  <div id="summary" hidden>
+    <div class="grid">
+      <div class="stat"><div class="n" id="c-new">–</div><div class="l">미보유 신권</div></div>
+      <div class="stat"><div class="n" id="c-unread">–</div><div class="l">안 읽은 책</div></div>
+      <div class="stat"><div class="n" id="c-author">–</div><div class="l">작가 신작</div></div>
+      <div class="stat"><div class="n" id="c-owned">–</div><div class="l">소장 시리즈/책</div></div>
+    </div>
+    <div class="hint" id="genat"></div>
+    <button class="sub" id="open-library">리디 서재에서 결과 보기 →</button>
+    <button class="sub" id="sync">BookDriller(:3210)로 보내기</button>
+  </div>
+
+  <div class="hint" id="loginhint" hidden>
+    <a href="https://ridibooks.com/account/login" target="_blank">리디북스에 로그인</a>한 뒤 다시 열어주세요.
+    쿠키를 붙여넣을 필요 없이 브라우저 세션을 그대로 씁니다.
+  </div>
+</main>
+<script type="module" src="popup.js"></script>
+</body>
+</html>
