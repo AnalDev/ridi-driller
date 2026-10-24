@@ -49,7 +49,7 @@ Vercel에서 개인 서재를 직접 분석하는 방식은 Cloudflare가 서버
 
 분석 결과는 [RIDI 서재](https://library.ridibooks.com/) 오른쪽 패널에 표시됩니다.
 
-확장 버전 `0.3.1`부터 구매 목록·내 책장·관심 작품과 [만화 신작](https://ridibooks.com/comics/new-releases?tab=CATEGORY_COMIC_ALL) 카드에 소장·읽기·관심 상태 배지와 필터 도구 모음이 추가됩니다.
+확장 버전 `0.3.2`부터 구매 목록·내 책장·관심 작품과 [만화 신작](https://ridibooks.com/comics/new-releases?tab=CATEGORY_COMIC_ALL) 카드에 소장·읽기·관심 상태 배지와 필터 도구 모음이 추가됩니다.
 
 배지는 RIDI 원본 DOM을 교체하지 않고 별도 Shadow DOM으로 삽입되며, 필터를 해제하면 숨겼던 원본 카드가 모두 복구됩니다.
 
