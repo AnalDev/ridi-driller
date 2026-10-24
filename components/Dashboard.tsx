@@ -49,6 +49,16 @@ function timeAgo(ts: number): string {
   return mo < 12 ? `${mo}개월 전` : `${Math.floor(mo / 12)}년 전`;
 }
 
+function loadCachedSnapshot(): Snapshot | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    return cached ? (JSON.parse(cached) as Snapshot) : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function Dashboard({
   count,
   onLogout,
@@ -56,7 +66,7 @@ export default function Dashboard({
   count: { item_total_count: number; unit_total_count: number };
   onLogout: () => void;
 }) {
-  const [snap, setSnap] = useState<Snapshot | null>(null);
+  const [snap, setSnap] = useState<Snapshot | null>(loadCachedSnapshot);
   const [tab, setTab] = useState<TabKey>("newVolume");
   const [syncing, setSyncing] = useState(false);
   const [progress, setProgress] = useState<SyncProgress | null>(null);
@@ -83,14 +93,11 @@ export default function Dashboard({
   }, [applySnapshot]);
 
   useEffect(() => {
-    try {
-      const cached = localStorage.getItem(CACHE_KEY);
-      if (cached) setSnap(JSON.parse(cached));
-    } catch {
-      /* ignore */
-    }
-    loadSnapshot();
-    return () => esRef.current?.close();
+    const timer = window.setTimeout(() => void loadSnapshot(), 0);
+    return () => {
+      window.clearTimeout(timer);
+      esRef.current?.close();
+    };
   }, [loadSnapshot]);
 
   function startSync(mode: "full" | "incremental") {

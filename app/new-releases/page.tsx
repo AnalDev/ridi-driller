@@ -59,8 +59,14 @@ export default function NewReleasesPage() {
   }, []);
 
   useEffect(() => {
-    load(genre);
-  }, [genre, load]);
+    const timer = window.setTimeout(() => void load(DEFAULT_GENRE), 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+
+  function selectGenre(nextGenre: number) {
+    setGenre(nextGenre);
+    void load(nextGenre);
+  }
 
   const ownedCount = items?.filter((i) => i.highlight === "owned").length ?? 0;
   const authorCount = items?.filter((i) => i.highlight === "author").length ?? 0;
@@ -98,7 +104,7 @@ export default function NewReleasesPage() {
           {genres.map((g) => (
             <button
               key={g.id}
-              onClick={() => setGenre(g.id)}
+              onClick={() => selectGenre(g.id)}
               className={`rounded-full px-3 py-1.5 text-sm transition ${
                 genre === g.id
                   ? "bg-violet-500 text-neutral-950"

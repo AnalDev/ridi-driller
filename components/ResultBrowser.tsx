@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BookCard, { type CardItem } from "./BookCard";
 import FilterBar from "./FilterBar";
 import { applyView, defaultViewForTab, facets, type ViewState } from "@/lib/view";
@@ -77,10 +77,11 @@ export default function ResultBrowser({
   const tabFacets = useMemo(() => facets(items), [items]);
   const filtered = useMemo(() => applyView(items, view), [items, view]);
 
-  useEffect(() => {
+  const updateView = useCallback((updater: (current: ViewState) => ViewState) => {
+    setView(updater);
     setVisible(PAGE_SIZE);
     setPage(1);
-  }, [view]);
+  }, []);
 
   // infinite scroll: load more when the sentinel nears the viewport.
   // `visible` is a dep so the observer re-arms and keeps filling the screen.
@@ -120,7 +121,7 @@ export default function ResultBrowser({
     <>
       <FilterBar
         view={view}
-        setView={setView}
+        setView={updateView}
         facets={tabFacets}
         tab={tab}
         resultCount={filtered.length}

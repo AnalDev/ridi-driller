@@ -26,7 +26,8 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    check();
+    const timer = window.setTimeout(() => void check(), 0);
+    return () => window.clearTimeout(timer);
   }, [check]);
 
   async function logout() {
