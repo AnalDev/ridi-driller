@@ -390,6 +390,10 @@
     const pagination = paginateIntegratedRows(filtered, prefs.page, prefs.pageSize);
     if (pagination.page !== prefs.page) updatePrefs(kind, { page: pagination.page });
 
+    const status = shadow.querySelector(".sync-status");
+    if (status) {
+      status.textContent = progressMessage || (view.generatedAt ? `${formatDate(view.generatedAt, true)} 로컬 색인` : "전체 데이터를 불러오는 중");
+    }
     const count = shadow.querySelector(".result-count");
     const results = shadow.querySelector(".results");
     const paginationHost = shadow.querySelector(".pagination-host");

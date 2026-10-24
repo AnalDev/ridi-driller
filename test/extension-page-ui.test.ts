@@ -25,6 +25,11 @@ describe("RIDI inline page tools", () => {
     expect(source).toContain("if (!count || !results || !paginationHost) return");
   });
 
+  it("refreshes the status text when cached results keep the same signature", () => {
+    expect(source).toContain('const status = shadow.querySelector(".sync-status")');
+    expect(source).toContain('status.textContent = progressMessage || (view.generatedAt ? `${formatDate(view.generatedAt, true)} 로컬 색인`');
+  });
+
   it("offers a combined unpurchased-or-unread filter", () => {
     expect(source).toContain('["attention", "미구매 또는 미독"]');
     expect(viewSource).toContain('matchesStatus(record, "unowned") || statuses.has("unread")');
