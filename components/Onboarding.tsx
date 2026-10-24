@@ -103,6 +103,38 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
         <b className="text-neutral-200">신간</b>을 찾아줍니다.
       </p>
 
+      <section className="mt-6 border-y border-emerald-500/30 bg-emerald-500/5 px-4 py-5">
+        <h2 className="text-base font-semibold text-white">권장 방식: Chrome 확장 프로그램</h2>
+        <p className="mt-1 text-sm text-neutral-400">
+          쿠키를 복사하지 않고 현재 브라우저에서 RIDI를 직접 조회하므로 Vercel의 Cloudflare 차단을 받지 않습니다.
+        </p>
+        <ol className="mt-4 space-y-1.5 text-sm text-neutral-300">
+          <li>1. ZIP을 내려받아 압축을 풉니다.</li>
+          <li>2. <code className="text-emerald-300">chrome://extensions</code>에서 개발자 모드를 켜고 압축해제된 확장을 로드합니다.</li>
+          <li>3. RIDI 로그인 후 확장 아이콘에서 <b>서재 분석</b>을 누릅니다.</li>
+        </ol>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <a
+            href="/ridi-driller-extension.zip"
+            download
+            className="rounded-md bg-emerald-500 px-4 py-2 text-sm font-semibold text-neutral-950 hover:bg-emerald-400"
+          >
+            Chrome 확장 다운로드
+          </a>
+          <a
+            href="https://library.ridibooks.com/"
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md border border-white/10 px-4 py-2 text-sm text-neutral-300 hover:bg-white/5"
+          >
+            RIDI 서재 열기
+          </a>
+        </div>
+        <p className="mt-3 text-xs text-neutral-500">
+          인증 쿠키는 RIDI 도메인 밖으로 전송되지 않고 분석 결과는 확장 로컬 저장소에만 보관됩니다.
+        </p>
+      </section>
+
       {/* usage screenshot */}
       <figure className="mt-6 overflow-hidden rounded-xl border border-white/10">
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -112,23 +144,6 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
           타입·카테고리·태그·별점(0.1 단위) 필터와 정렬로 골라볼 수 있어요.
         </figcaption>
       </figure>
-
-      {/* how to use, in 4 steps */}
-      <ol className="mt-6 grid gap-2 text-sm text-neutral-300 sm:grid-cols-2">
-        <li className="rounded-lg bg-neutral-900 p-3">
-          <b className="text-emerald-300">1.</b> ridibooks.com에 로그인하고 아래 방법으로{" "}
-          <code className="text-emerald-300">ridi-at</code> 쿠키를 복사
-        </li>
-        <li className="rounded-lg bg-neutral-900 p-3">
-          <b className="text-emerald-300">2.</b> 아래 입력창에 붙여넣고 <b>서재 연결하기</b>
-        </li>
-        <li className="rounded-lg bg-neutral-900 p-3">
-          <b className="text-emerald-300">3.</b> <b>서재 분석 시작</b> — 2~3분간 서재→신권→읽기상태→작가작품 순으로 채워짐
-        </li>
-        <li className="rounded-lg bg-neutral-900 p-3">
-          <b className="text-emerald-300">4.</b> 탭·검색·정렬·필터로 다음에 읽을 책을 고르기. 이후엔 <b>빠른 업데이트</b>로 증분 반영
-        </li>
-      </ol>
 
       {/* desktop app: one-click auto cookie */}
       {desktop && (
@@ -202,7 +217,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
         </summary>
         <div className="mt-3 space-y-3 text-xs leading-relaxed">
           <div>
-            <p className="font-medium text-neutral-200">방법 A — 개발자도구 (확장 없이, 가장 안전 · 권장)</p>
+            <p className="font-medium text-neutral-200">방법 A — 개발자도구 (수동 서버 연결)</p>
             <ol className="mt-1 list-decimal space-y-0.5 pl-5">
               <li>ridibooks.com 로그인</li>
               <li>F12 → Application → Cookies → https://ridibooks.com</li>
@@ -239,7 +254,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
               </li>
               <li>EditThisCookie — 유명하지만 관리가 뜸하고 사칭 클론 많음 → 개발자/리뷰 확인 필수.</li>
             </ul>
-            <p className="mt-1 text-neutral-500">잘 모르겠으면 방법 A(개발자도구)를 쓰세요. 곧 나올 데스크톱 앱은 로그인만 하면 자동으로 가져옵니다.</p>
+            <p className="mt-1 text-neutral-500">Vercel에서는 Cloudflare가 계속 차단할 수 있으므로 확장 프로그램을 우선 사용하세요.</p>
           </div>
         </div>
       </details>
@@ -260,10 +275,11 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
             </ol>
           </div>
           <div>
-            <p className="font-medium text-neutral-200">Vercel 배포 (동작함)</p>
+            <p className="font-medium text-neutral-200">Vercel 직접 연결 제한</p>
             <ul className="mt-1 list-disc space-y-0.5 pl-5">
-              <li>토큰을 서버에 영구 저장하지 않고 <b>httpOnly 쿠키</b>에만 두므로 Vercel에서도 로그인·조회할 수 있습니다.</li>
-              <li>Cloudflare 정책은 변할 수 있으므로 403이면 같은 브라우저에서 복사한 cURL을 입력하세요.</li>
+              <li>Vercel의 출구 IP는 사용자 브라우저와 달라 <code>cf_clearance</code>를 함께 넣어도 403이 발생할 수 있습니다.</li>
+              <li>배포 서버가 Cloudflare 챌린지를 대신 처리하는 방식은 지원하지 않습니다.</li>
+              <li>개인 서재 분석은 확장을 사용하고 이 사이트는 공개 도서 검색에 사용하세요.</li>
               <li>서버는 무상태라 <b>여러 명이 각자 자기 쿠키로 안전하게</b> 사용 가능. 서버엔 아무 토큰도 안 남음.</li>
               <li>전체 동기화는 수 분 소요 — 중간에 끊겨도 부분 결과는 스트리밍으로 표시되고, <b>빠른 업데이트</b>로 이어갈 수 있음.</li>
               <li>공개 URL이니 원치 않으면 접근 제어를 추가하세요. 가장 안전한 건 <b>로컬 실행</b>.</li>
@@ -275,8 +291,12 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
         </div>
       </details>
 
-      {/* form */}
-      <form onSubmit={submit} className="mt-6 space-y-4">
+      {/* advanced manual connection */}
+      <details className="mt-6 rounded-lg border border-white/10 bg-neutral-900/60 p-4">
+        <summary className="cursor-pointer text-sm font-medium text-neutral-300">
+          수동 서버 연결 (고급, Cloudflare 차단 가능)
+        </summary>
+      <form onSubmit={submit} className="mt-4 space-y-4">
         <div>
           <label className="mb-1 block text-sm font-medium text-neutral-300">
             리디 인증 정보 <span className="text-red-400">*</span>{" "}
@@ -317,6 +337,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
           {loading ? "확인 중…" : "서재 연결하기"}
         </button>
       </form>
+      </details>
     </div>
   );
 }

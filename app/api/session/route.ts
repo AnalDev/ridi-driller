@@ -55,7 +55,7 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           error:
-            "Cloudflare가 요청을 차단했습니다. 브라우저에서 복사한 cf_clearance와 같은 User-Agent가 포함된 cURL을 붙여넣으세요.",
+            "Cloudflare가 배포 서버 요청을 차단했습니다. 쿠키를 다시 복사해도 반복될 수 있으므로 Chrome 확장을 사용하거나 로컬에서 실행하세요.",
         },
         { status: 403 },
       );
