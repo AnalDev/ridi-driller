@@ -1,4 +1,5 @@
 import { READING_STATE_LABELS, readingStateOf } from "./catalog.js";
+import { mergeBibliography, STORE_DEFINITIONS } from "./store-library.js";
 
 const CACHE_KEY = "ridi_analysis";
 const INDEX_KEY = "ridi_page_index";
@@ -125,19 +126,11 @@ function noteRows() {
 }
 
 function storeRows() {
-  return Object.entries(state.storeLibraries).flatMap(([source, records]) =>
-    (Array.isArray(records) ? records : []).map((record, index) => ({
-      ...record,
-      key: record.key || `${source}:${record.id || index}`,
-      source,
-      sourceLabel: record.sourceLabel || source,
-      statuses: record.statuses ?? [],
-    })),
-  );
+  return mergeBibliography(state.index?.catalog ?? [], state.storeLibraries);
 }
 
 function rowsForTab() {
-  if (state.tab === "all") return state.index?.catalog ?? [];
+  if (state.tab === "all") return storeRows();
   if (["newVolume", "unread", "finished", "authorNew"].includes(state.tab)) {
     return recommendationRows(state.tab);
   }
@@ -167,9 +160,11 @@ function filteredRows() {
   const field = $("search-field").value;
   const ownership = $("ownership").value;
   const readingState = $("reading-state").value;
+  const source = $("source").value;
   const missingOnly = $("missing-only").checked;
   const rows = rowsForTab().filter((record) => {
     if (query && !normalize(searchableValue(record, field)).includes(query)) return false;
+    if (source !== "all" && !(record.sources ?? [record.source]).includes(source)) return false;
     if (ownership !== "all" && record.ownership !== ownership) return false;
     if (readingState !== "all" && record.readingState !== readingState) return false;
     if (missingOnly && Number(record.missingCount ?? record.missing ?? 0) <= 0) return false;
@@ -205,6 +200,10 @@ function rowBadges(record) {
   if ((record.statuses ?? []).includes("highlight")) addBadge(host, "형광펜");
   if ((record.statuses ?? []).includes("memo")) addBadge(host, "RIDI 메모", "pink");
   if ((record.statuses ?? []).includes("bookmark")) addBadge(host, "책갈피");
+  if ((record.statuses ?? []).includes("storePurchase")) addBadge(host, record.sourceLabel || "구매 기록", "green");
+  if ((record.formats ?? []).includes("ebook")) addBadge(host, "전자책", "blue");
+  if ((record.formats ?? []).includes("paper")) addBadge(host, "종이책");
+  if ((record.formats ?? []).includes("audiobook")) addBadge(host, "오디오북", "pink");
   return host;
 }
 
@@ -273,6 +272,15 @@ function renderBookRow(record) {
       fact("기록", formatDate(record.notedAt)),
       fact("유형", noteLabels[record.noteType] ?? "독서노트"),
     );
+  } else if ((record.statuses ?? []).includes("storePurchase")) {
+    grid.append(
+      fact("최근 구매", formatDate(record.purchaseDate)),
+      fact("서점", record.sourceLabel || "확인 안 됨"),
+      fact("형식", (record.formats ?? []).map((format) => ({ ebook: "전자책", paper: "종이책", audiobook: "오디오북" })[format] ?? format).join(" · ") || "확인 안 됨"),
+      fact("구매 기록", `${record.purchaseCount ?? 1}건`),
+      fact("마지막 열람", formatDate(record.lastReadAt, true)),
+      fact("권수", record.totalCount ? `소장 ${record.ownedCount ?? 0} / 발매 ${record.totalCount}` : "확인 안 됨"),
+    );
   } else {
     grid.append(
       fact("구매", formatDate(record.purchaseDate)),
@@ -334,7 +342,7 @@ function renderResults() {
 }
 
 function tabCount(key) {
-  if (key === "all") return state.index?.catalog?.length ?? 0;
+  if (key === "all") return storeRows().length;
   if (key === "interest") return state.index?.interest?.length ?? 0;
   if (key === "notes") return state.readingNotes.length;
   if (key === "stores") return storeRows().length;
@@ -361,8 +369,9 @@ function renderTabs() {
 
 function renderMetrics() {
   const catalog = state.index?.catalog ?? [];
+  const bibliography = storeRows();
   const metrics = [
-    [catalog.length, "전체 소장 작품"],
+    [bibliography.length, "통합 소장 작품"],
     [catalog.filter((record) => record.readingState === "neverOpened").length, "아직 안 읽음"],
     [catalog.filter((record) => record.readingState === "inProgress").length, "읽는 중"],
     [catalog.filter((record) => ["caughtUp", "finished"].includes(record.readingState)).length, "발매분 완독"],
@@ -376,12 +385,42 @@ function renderMetrics() {
   }));
 }
 
+function renderStoreConnectors() {
+  const host = $("store-connectors");
+  host.hidden = state.tab !== "stores";
+  if (host.hidden) return;
+  host.replaceChildren();
+  const intro = el("div", "connector-intro");
+  intro.append(
+    el("strong", "", "서점별 구매내역 가져오기"),
+    el("span", "", "구매내역 페이지를 연 뒤 확장 아이콘에서 현재 페이지 가져오기를 누르세요. 보이는 항목만 이 기기에 저장됩니다."),
+  );
+  host.append(intro);
+  const grid = el("div", "connector-grid");
+  for (const [source, definition] of Object.entries(STORE_DEFINITIONS)) {
+    const count = source === "ridi"
+      ? state.index?.catalog?.length ?? 0
+      : state.storeLibraries[source]?.length ?? 0;
+    const item = el("div", "connector-item");
+    const summary = el("div");
+    summary.append(el("strong", "", definition.label), el("span", "", `${count.toLocaleString("ko-KR")}개 저장`));
+    const link = el("a", "", source === "ridi" ? "서재 열기" : "구매내역 열기");
+    link.href = definition.libraryUrl;
+    link.target = "_blank";
+    link.rel = "noreferrer";
+    item.append(summary, link);
+    grid.append(item);
+  }
+  host.append(grid);
+}
+
 function render() {
   if (!TAB_DEFS.some(([key]) => key === state.tab)) state.tab = "all";
   const title = TAB_DEFS.find(([key]) => key === state.tab)?.[1] ?? "전체 서지";
   $("view-title").textContent = title;
   renderTabs();
   renderMetrics();
+  renderStoreConnectors();
   renderResults();
 }
 
@@ -424,15 +463,17 @@ chrome.runtime.onMessage.addListener((message) => {
     $("sync-status").classList.add("error");
   }
   if (message.type === "readingNotesUpdated") void loadStorage();
+  if (message.type === "storeLibraryUpdated") void loadStorage();
 });
 
-for (const id of ["query", "search-field", "ownership", "reading-state", "sort", "missing-only"]) {
+for (const id of ["query", "search-field", "source", "ownership", "reading-state", "sort", "missing-only"]) {
   $(id).addEventListener(id === "query" ? "input" : "change", renderResults);
 }
 
 $("reset-filters").addEventListener("click", () => {
   $("query").value = "";
   $("search-field").value = "all";
+  $("source").value = "all";
   $("ownership").value = "all";
   $("reading-state").value = "all";
   $("sort").value = "default";

@@ -32,6 +32,7 @@
         </div>
       </header>
       <section class="metrics" id="metrics" aria-label="서재 요약"></section>
+      <section class="store-connectors" id="store-connectors" hidden></section>
       <section class="filters" aria-label="검색과 필터">
         <label class="search-field">
           <span>검색</span>
@@ -45,6 +46,17 @@
             <option value="author">작가</option>
             <option value="publisher">출판사</option>
             <option value="memo">메모</option>
+          </select>
+        </label>
+        <label>
+          <span>서점</span>
+          <select id="source">
+            <option value="all">전체 서점</option>
+            <option value="ridi">RIDI</option>
+            <option value="aladin">알라딘</option>
+            <option value="yes24">YES24</option>
+            <option value="kyobo">교보문고</option>
+            <option value="youngpoong">영풍문고</option>
           </select>
         </label>
         <label>

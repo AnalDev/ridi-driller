@@ -120,29 +120,36 @@ export function mergeCapturedStoreRecords(libraries, source, records) {
 export function mergeBibliography(catalog, libraries) {
   const normalized = [];
   for (const record of catalog ?? []) {
-    const canonicalKey = `work:${canonicalTitle(record.title)}:${canonicalTitle(record.authors?.[0] ?? "")}`;
-    normalized.push({ ...record, canonicalKey, sources: ["ridi"], sourceLabels: ["RIDI"], formats: [record.fileFormat || record.contentType].filter(Boolean) });
+    const workKey = `work:${canonicalTitle(record.title)}:${canonicalTitle(record.authors?.[0] ?? "")}`;
+    normalized.push({ ...record, canonicalKey: workKey, workKey, sources: ["ridi"], sourceLabels: ["RIDI"], formats: [record.fileFormat || record.contentType].filter(Boolean) });
   }
   for (const [source, records] of Object.entries(libraries ?? {})) {
     for (const [index, input] of (Array.isArray(records) ? records : []).entries()) {
       const record = normalizeStoreRecord(source, input, index);
-      if (record) normalized.push({ ...record, sources: [source], sourceLabels: [record.sourceLabel], formats: [record.format].filter((value) => value !== "unknown") });
+      if (record) {
+        const workKey = `work:${canonicalTitle(record.title)}:${canonicalTitle(record.authors?.[0] ?? "")}`;
+        normalized.push({ ...record, workKey, sources: [source], sourceLabels: [record.sourceLabel], formats: [record.format].filter((value) => value !== "unknown") });
+      }
     }
   }
 
   const groups = new Map();
+  const aliases = new Map();
   for (const record of normalized) {
-    const group = groups.get(record.canonicalKey);
+    const matchKeys = [...new Set([record.canonicalKey, record.workKey].filter(Boolean))];
+    const groupKey = matchKeys.map((key) => aliases.get(key)).find(Boolean) ?? record.canonicalKey;
+    const group = groups.get(groupKey);
     if (!group) {
-      groups.set(record.canonicalKey, { ...record, purchaseRecords: [record] });
+      groups.set(groupKey, { ...record, canonicalKey: groupKey, purchaseRecords: [record] });
+      for (const key of matchKeys) aliases.set(key, groupKey);
       continue;
     }
     const preferred = record.source === "ridi" ? record : group;
-    groups.set(record.canonicalKey, {
+    groups.set(groupKey, {
       ...group,
       ...preferred,
-      key: `bibliography:${record.canonicalKey}`,
-      canonicalKey: record.canonicalKey,
+      key: `bibliography:${groupKey}`,
+      canonicalKey: groupKey,
       sources: [...new Set([...group.sources, ...record.sources])],
       sourceLabels: [...new Set([...group.sourceLabels, ...record.sourceLabels])],
       formats: [...new Set([...group.formats, ...record.formats])],
@@ -150,6 +157,7 @@ export function mergeBibliography(catalog, libraries) {
       purchaseRecords: [...group.purchaseRecords, record],
       statuses: [...new Set([...(group.statuses ?? []), ...(record.statuses ?? []), "storePurchase"])],
     });
+    for (const key of matchKeys) aliases.set(key, groupKey);
   }
   return [...groups.values()].map((record) => ({
     ...record,

@@ -55,4 +55,14 @@ describe("local bookstore library", () => {
       purchaseCount: 2,
     }));
   });
+
+  it("merges a RIDI work without ISBN with a physical book that has ISBN", () => {
+    const rows = mergeBibliography([
+      { key: "ridi:1", source: "ridi", title: "통합 서지", authors: ["작가"], ownership: "owned" },
+    ], {
+      kyobo: [{ title: "통합 서지 1권", authors: ["작가"], isbn13: "9788912345678", format: "paper" }],
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].sources).toEqual(["ridi", "kyobo"]);
+  });
 });
