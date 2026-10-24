@@ -14,6 +14,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "extension:package": "bash scripts/package-extension.sh",
     "tauri": "tauri",
     "app:dev": "tauri dev",
     "build:sidecar": "next build && node scripts/assemble-server.mjs",
