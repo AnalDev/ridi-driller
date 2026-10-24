@@ -25,6 +25,7 @@ describe("RIDI extension manifest", () => {
       "https://library.ridibooks.com/*",
       "https://ridibooks.com/library*",
       "https://ridibooks.com/comics/new-releases*",
+      "https://ridibooks.com/books/*",
     ]);
     expect(manifest.web_accessible_resources[0]?.resources).toContain("src/page-index.js");
   });

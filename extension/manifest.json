@@ -37,7 +37,8 @@
       "matches": [
         "https://library.ridibooks.com/*",
         "https://ridibooks.com/library*",
-        "https://ridibooks.com/comics/new-releases*"
+        "https://ridibooks.com/comics/new-releases*",
+        "https://ridibooks.com/books/*"
       ],
       "js": ["src/page-enhancer.js"],
       "css": ["src/page-enhancer.css"],

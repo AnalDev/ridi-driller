@@ -1,9 +1,17 @@
 (async () => {
-  const { classifyPageBook, createPageLookup, detectPageKind, selectBadgeStatuses } = await import(
+  const {
+    classifyPageBook,
+    createPageLookup,
+    detectPageKind,
+    normalizeBookTitle,
+    selectBadgeStatuses,
+  } = await import(
     chrome.runtime.getURL("src/page-index.js")
   );
 
   const TOOLBAR_ID = "ridi-driller-page-tools";
+  const DETAIL_TOOLS_ID = "ridi-driller-detail-tools";
+  const LIBRARY_NAV_ID = "ridi-driller-author-tab";
   const BADGE_CLASS = "ridi-driller-card-badges";
   const HIDDEN_CLASS = "ridi-driller-card-hidden";
   const LIBRARY_COVER_SELECTOR = 'img[alt$="표지"], [role="img"][aria-label$="표지"]';
@@ -20,9 +28,9 @@
   const FILTERS = [
     ["all", "전체"],
     ["owned", "소장"],
-    ["unowned", "미소장"],
+    ["unowned", "미구매"],
     ["newVolume", "신권"],
-    ["unread", "미독"],
+    ["unread", "아직 안 읽음"],
     ["finished", "완독"],
     ["interest", "관심"],
     ["interestUpdate", "새 이야기"],
@@ -33,11 +41,14 @@
     shelves: "내 책장",
     interest: "관심 작품",
     releases: "만화 신작",
+    detail: "작품 상세",
   };
 
   let pageIndex = null;
   let lookup = createPageLookup(null);
-  let activeFilter = "all";
+  let activeFilters = new Set();
+  let query = "";
+  let searchField = "all";
   let currentCards = [];
   let toolbarSignature = "";
   let renderTimer = null;
@@ -52,6 +63,19 @@
 
   function cleanTitle(value) {
     return String(value ?? "").replace(/\s*표지\s*$/u, "").replace(/\s+/gu, " ").trim();
+  }
+
+  function cardAuthors(card, title) {
+    const linked = [...card.querySelectorAll('a[href*="/author/"]')]
+      .map((link) => cleanTitle(link.textContent))
+      .filter(Boolean);
+    if (linked.length > 0) return [...new Set(linked)];
+    const text = cleanTitle(card.textContent)
+      .replace(title, " ")
+      .replace(/안 본 이야기\s*\d*개?|총\s*\d+\s*권|신규 업데이트 도서/gu, " ")
+      .replace(/\s+/gu, " ")
+      .trim();
+    return text ? [text] : [];
   }
 
   function storeBookId(href) {
@@ -90,6 +114,7 @@
       cards.push({
         bookId: storeLink ? storeBookId(storeLink.getAttribute("href")) : null,
         title,
+        authors: cardAuthors(card, title),
         card,
         badgeAnchor: image.closest("a") || image.parentElement,
         pageKind: kind,
@@ -121,6 +146,7 @@
       cards.push({
         bookId,
         title,
+        authors: cardAuthors(card, title),
         card,
         badgeAnchor: coverLink || image.parentElement,
         pageKind: "releases",
@@ -192,16 +218,39 @@
     return keys.has(filter);
   }
 
+  function queryMatches(item) {
+    const needle = normalizeBookTitle(query);
+    if (!needle) return true;
+    const title = normalizeBookTitle(item.title);
+    const authors = normalizeBookTitle(item.authors.join(" "));
+    if (searchField === "title") return title.includes(needle);
+    if (searchField === "author") return authors.includes(needle);
+    return `${title}${authors}`.includes(needle);
+  }
+
+  function itemMatches(item) {
+    return queryMatches(item) && [...activeFilters].every((filter) => filterMatches(item, filter));
+  }
+
   function applyFilter() {
     for (const item of currentCards) {
-      item.card.classList.toggle(HIDDEN_CLASS, !filterMatches(item, activeFilter));
+      item.card.classList.toggle(HIDDEN_CLASS, !itemMatches(item));
     }
+  }
+
+  function visibleCount() {
+    return currentCards.filter(itemMatches).length;
   }
 
   function toolbarCounts() {
     return Object.fromEntries(
       FILTERS.map(([key]) => [key, currentCards.filter((item) => filterMatches(item, key)).length]),
     );
+  }
+
+  function refreshVisibleCount(host) {
+    const count = host?.shadowRoot?.querySelector(".count");
+    if (count) count.textContent = `표시 ${visibleCount()} / ${currentCards.length}`;
   }
 
   function ensureToolbar(kind) {
@@ -214,8 +263,17 @@
     }
     const counts = toolbarCounts();
     const availableFilters = FILTERS.filter(([key]) => key === "all" || counts[key] > 0);
-    if (!availableFilters.some(([key]) => key === activeFilter)) activeFilter = "all";
-    const signature = JSON.stringify({ kind, counts, activeFilter, hasIndex: Boolean(pageIndex), progressMessage });
+    const availableKeys = new Set(availableFilters.map(([key]) => key));
+    activeFilters = new Set([...activeFilters].filter((key) => availableKeys.has(key)));
+    const signature = JSON.stringify({
+      kind,
+      counts,
+      activeFilters: [...activeFilters].sort(),
+      query,
+      searchField,
+      hasIndex: Boolean(pageIndex),
+      progressMessage,
+    });
     if (signature === toolbarSignature) return;
     toolbarSignature = signature;
 
@@ -224,16 +282,23 @@
     const style = document.createElement("style");
     style.textContent = `
       :host { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:2147482999; color:#18181b; font:13px/1.4 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif; letter-spacing:0; }
-      .bar { display:flex; align-items:center; gap:8px; max-width:min(900px,calc(100vw - 24px)); padding:8px 10px; border:1px solid #d4d4d8; border-radius:8px; background:rgba(255,255,255,.97); box-shadow:0 8px 24px rgba(0,0,0,.18); }
+      .bar { display:flex; align-items:center; gap:8px; max-width:min(1180px,calc(100vw - 24px)); padding:8px 10px; border:1px solid #d4d4d8; border-radius:7px; background:rgba(255,255,255,.98); box-shadow:0 8px 24px rgba(0,0,0,.16); }
       .title { white-space:nowrap; font-weight:700; }
       .modes { display:flex; gap:2px; overflow-x:auto; scrollbar-width:none; }
       .modes::-webkit-scrollbar { display:none; }
       button { flex:none; border:0; border-radius:5px; padding:6px 8px; background:#f4f4f5; color:#52525b; cursor:pointer; font:600 12px/1.2 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif; letter-spacing:0; white-space:nowrap; }
       button:hover { background:#e4e4e7; color:#18181b; }
       button[aria-pressed="true"], button.primary { background:#167a55; color:#fff; }
+      .search { display:flex; align-items:center; flex:none; height:30px; border:1px solid #d4d4d8; border-radius:5px; overflow:hidden; background:#fff; }
+      .search select,.search input { height:100%; border:0; background:transparent; color:#27272a; font:12px/1.2 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif; letter-spacing:0; }
+      .search select { width:70px; padding-left:6px; border-right:1px solid #e4e4e7; }
+      .search input { width:150px; padding:0 8px; outline:0; }
+      .count { flex:none; color:#71717a; font-size:11px; white-space:nowrap; }
+      .reset { width:28px; padding-inline:0; font-size:17px; }
+      .open { border:1px solid #d4d4d8; background:#fff; color:#27272a; }
       .progress { max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#52525b; font-size:12px; }
-      @media (prefers-color-scheme:dark) { .bar { border-color:#3f3f46; background:rgba(24,24,27,.97); color:#f4f4f5; } button { background:#27272a; color:#d4d4d8; } button:hover { background:#3f3f46; color:#fff; } .progress { color:#a1a1aa; } }
-      @media (max-width:640px) { :host { bottom:8px; } .bar { gap:6px; padding:6px 8px; } .title { display:none; } }
+      @media (prefers-color-scheme:dark) { .bar { border-color:#3f3f46; background:rgba(24,24,27,.98); color:#f4f4f5; } button { background:#27272a; color:#d4d4d8; } button:hover { background:#3f3f46; color:#fff; } .search { border-color:#3f3f46; background:#18181b; } .search select,.search input { color:#e4e4e7; } .search select { border-color:#3f3f46; } .open { border-color:#52525b; background:#27272a; } .count,.progress { color:#a1a1aa; } }
+      @media (max-width:820px) { :host { bottom:8px; } .bar { flex-wrap:wrap; gap:6px; padding:6px 8px; } .title { display:none; } .modes { order:3; width:100%; } .search { flex:1; } .search input { width:100%; min-width:80px; } }
     `;
     const bar = document.createElement("div");
     bar.className = "bar";
@@ -258,16 +323,46 @@
       });
       bar.append(message, analyze);
     } else {
+      const search = document.createElement("label");
+      search.className = "search";
+      const field = document.createElement("select");
+      field.title = "검색 범위";
+      for (const [value, label] of [["all", "통합"], ["title", "작품명"], ["author", "작가"]]) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        option.selected = searchField === value;
+        field.append(option);
+      }
+      field.addEventListener("change", () => {
+        searchField = field.value;
+        applyFilter();
+        refreshVisibleCount(host);
+      });
+      const input = document.createElement("input");
+      input.type = "search";
+      input.placeholder = "작품명·작가 검색";
+      input.value = query;
+      input.addEventListener("input", () => {
+        query = input.value;
+        applyFilter();
+        refreshVisibleCount(host);
+      });
+      search.append(field, input);
+      bar.append(search);
+
       const modes = document.createElement("div");
       modes.className = "modes";
       for (const [key, label] of availableFilters) {
         const button = document.createElement("button");
         button.type = "button";
         button.dataset.filter = key;
-        button.setAttribute("aria-pressed", String(activeFilter === key));
+        button.setAttribute("aria-pressed", String(key === "all" ? activeFilters.size === 0 : activeFilters.has(key)));
         button.textContent = `${label} ${counts[key]}`;
         button.addEventListener("click", () => {
-          activeFilter = key;
+          if (key === "all") activeFilters.clear();
+          else if (activeFilters.has(key)) activeFilters.delete(key);
+          else activeFilters.add(key);
           applyFilter();
           toolbarSignature = "";
           ensureToolbar(kind);
@@ -275,6 +370,30 @@
         modes.append(button);
       }
       bar.append(modes);
+      const count = document.createElement("span");
+      count.className = "count";
+      count.textContent = `표시 ${visibleCount()} / ${currentCards.length}`;
+      bar.append(count);
+      const reset = document.createElement("button");
+      reset.type = "button";
+      reset.className = "reset";
+      reset.title = "검색과 필터 초기화";
+      reset.setAttribute("aria-label", "검색과 필터 초기화");
+      reset.textContent = "×";
+      reset.addEventListener("click", () => {
+        activeFilters.clear();
+        query = "";
+        searchField = "all";
+        applyFilter();
+        toolbarSignature = "";
+        ensureToolbar(kind);
+      });
+      const open = document.createElement("button");
+      open.type = "button";
+      open.className = "open";
+      open.textContent = "서지 관리";
+      open.addEventListener("click", () => void send("openDashboard", { hash: kind === "interest" ? "interest" : "all" }));
+      bar.append(reset, open);
       if (progressMessage) {
         const progress = document.createElement("span");
         progress.className = "progress";
@@ -285,8 +404,129 @@
     shadow.append(style, bar);
   }
 
+  function ensureLibraryNavLink(kind) {
+    if (!["purchases", "shelves", "interest"].includes(kind)) return;
+    if (document.getElementById(LIBRARY_NAV_ID)) return;
+    const reference = [...document.querySelectorAll("a[href]")].find((link) => {
+      try {
+        return new URL(link.href, location.href).pathname.endsWith("/library/serial-preferences");
+      } catch {
+        return false;
+      }
+    });
+    if (!reference?.parentElement?.parentElement) return;
+    const wrapper = reference.parentElement.cloneNode(false);
+    const link = reference.cloneNode(false);
+    link.id = LIBRARY_NAV_ID;
+    link.href = "#ridi-driller-author-new";
+    link.textContent = "구매 작가의 다른 작품";
+    link.title = "리디 드릴러 서지 관리에서 구매 작가의 미구매 작품 보기";
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      void send("openDashboard", { hash: "authorNew" });
+    });
+    wrapper.append(link);
+    reference.parentElement.insertAdjacentElement("afterend", wrapper);
+  }
+
+  function formatDate(value) {
+    if (!value) return "열람 기록 없음";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "열람일 확인 불가";
+    return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  }
+
+  function ensureDetailTools() {
+    const bookId = location.pathname.match(/^\/books\/(\d+)/u)?.[1] ?? null;
+    if (!bookId) return;
+    const pageTitle = cleanTitle(document.querySelector('meta[property="og:title"]')?.content || document.title)
+      .replace(/\s*-\s*만화.*$/u, "")
+      .replace(/\s*-\s*리디.*$/u, "");
+    const catalog = pageIndex?.catalog ?? [];
+    const record = catalog.find((item) => item.bId === bookId)
+      ?? catalog.find((item) => normalizeBookTitle(item.title) === normalizeBookTitle(pageTitle));
+    const statuses = classifyPageBook(lookup, { bookId, title: pageTitle, pageKind: "detail" });
+    const signature = JSON.stringify({ bookId, record, statuses: statuses.map((status) => status.key) });
+    const current = document.getElementById(DETAIL_TOOLS_ID);
+    if (current?.dataset.signature === signature) return;
+    current?.remove();
+
+    const host = document.createElement("div");
+    host.id = DETAIL_TOOLS_ID;
+    host.dataset.signature = signature;
+    const shadow = host.attachShadow({ mode: "open" });
+    const style = document.createElement("style");
+    style.textContent = `
+      :host { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:2147482999; color:#18181b; font:13px/1.35 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif; letter-spacing:0; }
+      .bar { display:flex; align-items:center; gap:9px; max-width:min(940px,calc(100vw - 24px)); padding:9px 10px; border:1px solid #d4d4d8; border-radius:7px; background:rgba(255,255,255,.98); box-shadow:0 8px 24px rgba(0,0,0,.16); }
+      .brand { font-weight:800; white-space:nowrap; }
+      .status { display:flex; gap:4px; overflow:hidden; }
+      .badge { flex:none; border-radius:4px; padding:3px 6px; color:#fff; font-size:11px; font-weight:700; white-space:nowrap; }
+      .meta { min-width:150px; color:#52525b; font-size:11.5px; white-space:nowrap; }
+      .actions { display:flex; gap:5px; margin-left:auto; }
+      a,button { min-height:31px; display:inline-flex; align-items:center; justify-content:center; border:1px solid #d4d4d8; border-radius:5px; padding:5px 9px; background:#fff; color:#27272a; cursor:pointer; text-decoration:none; font:600 12px/1.2 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif; letter-spacing:0; white-space:nowrap; }
+      a.primary { border-color:#167a55; background:#167a55; color:#fff; }
+      @media (prefers-color-scheme:dark) { .bar { border-color:#3f3f46; background:rgba(24,24,27,.98); color:#f4f4f5; } .meta { color:#a1a1aa; } a,button { border-color:#52525b; background:#27272a; color:#f4f4f5; } }
+      @media (max-width:700px) { :host { bottom:8px; } .bar { flex-wrap:wrap; gap:6px; } .brand { display:none; } .status { max-width:100%; } .meta { order:3; width:100%; } }
+    `;
+    const bar = document.createElement("div");
+    bar.className = "bar";
+    const brand = document.createElement("span");
+    brand.className = "brand";
+    brand.textContent = "리디 드릴러";
+    const status = document.createElement("span");
+    status.className = "status";
+    for (const item of selectBadgeStatuses(statuses, "releases")) {
+      const badge = document.createElement("span");
+      badge.className = "badge";
+      badge.style.background = STATUS_META[item.key]?.color || "#52525b";
+      badge.textContent = STATUS_META[item.key]?.label || item.key;
+      status.append(badge);
+    }
+    if (status.childElementCount === 0) {
+      const badge = document.createElement("span");
+      badge.className = "badge";
+      badge.style.background = "#52525b";
+      badge.textContent = "미구매";
+      status.append(badge);
+    }
+    const meta = document.createElement("span");
+    meta.className = "meta";
+    meta.textContent = record
+      ? `${formatDate(record.lastReadAt)} · 소장 ${record.ownedCount}/${record.totalCount}권`
+      : "서재 분석에서 작품 기록을 찾지 못했습니다.";
+    const actions = document.createElement("span");
+    actions.className = "actions";
+    if (record?.readerUrl) {
+      const read = document.createElement("a");
+      read.className = "primary";
+      read.href = record.readerUrl;
+      read.textContent = "책 읽기";
+      actions.append(read);
+    }
+    const purchase = document.createElement("button");
+    purchase.type = "button";
+    purchase.textContent = "구매 영역";
+    purchase.addEventListener("click", () => {
+      const target = [...document.querySelectorAll("button")].find((button) =>
+        /소장하기|선택 소장|구매하기/u.test(cleanTitle(button.textContent)),
+      );
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    const dashboard = document.createElement("button");
+    dashboard.type = "button";
+    dashboard.textContent = "서지 관리";
+    dashboard.addEventListener("click", () => void send("openDashboard", { hash: "all" }));
+    actions.append(purchase, dashboard);
+    bar.append(brand, status, meta, actions);
+    shadow.append(style, bar);
+    document.documentElement.append(host);
+  }
+
   function cleanup() {
     document.getElementById(TOOLBAR_ID)?.remove();
+    document.getElementById(DETAIL_TOOLS_ID)?.remove();
+    document.getElementById(LIBRARY_NAV_ID)?.parentElement?.remove();
     toolbarSignature = "";
     for (const item of currentCards) item.card.classList.remove(HIDDEN_CLASS);
     currentCards = [];
@@ -298,6 +538,14 @@
       cleanup();
       return;
     }
+    ensureLibraryNavLink(kind);
+    if (kind === "detail") {
+      document.getElementById(TOOLBAR_ID)?.remove();
+      currentCards = [];
+      ensureDetailTools();
+      return;
+    }
+    document.getElementById(DETAIL_TOOLS_ID)?.remove();
     const cards = kind === "releases" ? collectReleaseCards() : collectLibraryCards(kind);
     currentCards = cards.map((card) => ({
       ...card,
@@ -321,7 +569,9 @@
       renderTimer = null;
       if (lastUrl !== location.href) {
         lastUrl = location.href;
-        activeFilter = "all";
+        activeFilters.clear();
+        query = "";
+        searchField = "all";
         toolbarSignature = "";
       }
       render();

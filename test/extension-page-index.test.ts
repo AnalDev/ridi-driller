@@ -15,7 +15,8 @@ describe("RIDI page enhancement index", () => {
     expect(detectPageKind("ridibooks.com", "/library/books")).toBe("purchases");
     expect(detectPageKind("ridibooks.com", "/library/shelves")).toBe("shelves");
     expect(detectPageKind("ridibooks.com", "/comics/new-releases")).toBe("releases");
-    expect(detectPageKind("ridibooks.com", "/books/123")).toBeNull();
+    expect(detectPageKind("ridibooks.com", "/books/123")).toBe("detail");
+    expect(detectPageKind("ridibooks.com", "/event/123")).toBeNull();
   });
 
   it("normalizes volume labels without losing the series title", () => {

@@ -21,6 +21,7 @@ export function detectPageKind(hostname, pathname) {
     if (path === "/" || path.startsWith("/books")) return "purchases";
   }
   if (hostname === "ridibooks.com" && path === "/comics/new-releases") return "releases";
+  if (hostname === "ridibooks.com" && /^\/books\/\d+/u.test(path)) return "detail";
   return null;
 }
 
