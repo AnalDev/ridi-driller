@@ -13,19 +13,11 @@ import {
 } from "./api.js";
 import { buildRecommendations } from "./recommend.js";
 import { buildPageIndex } from "./page-index.js";
+import { buildCatalog } from "./catalog.js";
 
 const CACHE_KEY = "ridi_analysis";
 const PAGE_INDEX_KEY = "ridi_page_index";
 let running = false;
-
-function limitedRecommendations(recommendations) {
-  return {
-    newVolume: recommendations.newVolume.slice(0, 100),
-    unread: recommendations.unread.slice(0, 100),
-    finished: recommendations.finished.slice(0, 100),
-    authorNew: recommendations.authorNew.slice(0, 100),
-  };
-}
 
 /** 진행률을 팝업·컨텐츠로 방송 (수신자 없으면 조용히 무시). */
 function broadcast(msg) {
@@ -54,6 +46,24 @@ async function analyze({ withAuthors = true } = {}) {
       broadcast({ type: "progress", phase: "reading", message: `읽기 ${done}/${total}`, done, total }),
     );
 
+    const supplementalIds = [...new Set([
+      ...[...lastRead.values()].map((record) => record?.bookId).filter(Boolean),
+      ...[...meta.values()].map((book) => book.series?.property?.opened_last_volume_id).filter(Boolean),
+    ])].filter((bookId) => !meta.has(bookId));
+    if (supplementalIds.length > 0) {
+      broadcast({
+        type: "progress",
+        phase: "enrich",
+        message: "최근 열람 권과 최신 권 정보 보강 중…",
+        done: 0,
+        total: supplementalIds.length,
+      });
+      const supplementalMeta = await fetchBooksMeta(supplementalIds, (done, total) =>
+        broadcast({ type: "progress", phase: "enrich", message: `추가 메타 ${done}/${total}`, done, total }),
+      );
+      for (const [bookId, book] of supplementalMeta) meta.set(bookId, book);
+    }
+
     // 작가 신작 (내가 읽은 작가 상위)
     let authorBooks = new Map();
     if (withAuthors) {
@@ -74,6 +84,7 @@ async function analyze({ withAuthors = true } = {}) {
     }
 
     const recs = buildRecommendations({ units, meta, lastRead, authorBooks });
+    const catalog = buildCatalog({ units, meta, lastRead });
     const generatedAt = Date.now();
     let interestBooks = [];
     let interestAvailable = true;
@@ -97,9 +108,10 @@ async function analyze({ withAuthors = true } = {}) {
         interest: interestBooks.length,
       },
       interestAvailable,
-      ...limitedRecommendations(recs),
+      catalogCount: catalog.length,
+      ...recs,
     };
-    const pageIndex = buildPageIndex({ units, recommendations: recs, interestBooks, generatedAt });
+    const pageIndex = buildPageIndex({ units, recommendations: recs, interestBooks, catalog, generatedAt });
     await chrome.storage.local.set({ [CACHE_KEY]: result, [PAGE_INDEX_KEY]: pageIndex });
     broadcast({ type: "done", result });
     return { result };

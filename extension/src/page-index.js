@@ -48,10 +48,11 @@ function compactRecord(record, title = record.seriesTitle || record.title) {
  *   units: Array<{ b_id?: string | number, unit_id?: string | number, unit_title?: string }>,
  *   recommendations: Record<string, Array<{ bId?: string | number, title?: string, seriesTitle?: string, reason?: string }>>,
  *   interestBooks?: Array<{ bookId?: string | number, title?: string, newReleaseCount?: number, isNotificationOn?: boolean }>,
+ *   catalog?: Array<object>,
  *   generatedAt?: number,
  * }} input
  */
-export function buildPageIndex({ units, recommendations, interestBooks = [], generatedAt = Date.now() }) {
+export function buildPageIndex({ units, recommendations, interestBooks = [], catalog = [], generatedAt = Date.now() }) {
   const statuses = Object.fromEntries(
     STATUS_KEYS.map((key) => [key, (recommendations[key] ?? []).map((record) => compactRecord(record))]),
   );
@@ -59,6 +60,7 @@ export function buildPageIndex({ units, recommendations, interestBooks = [], gen
   return {
     version: PAGE_INDEX_VERSION,
     generatedAt,
+    catalog,
     owned: units.map((unit) => ({
       bId: String(unit.b_id ?? ""),
       title: String(unit.unit_title ?? ""),
