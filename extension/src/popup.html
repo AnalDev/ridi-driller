@@ -22,10 +22,7 @@
   .bar { height:6px; background:var(--line); border-radius:4px; overflow:hidden; margin:10px 0 4px; }
   .bar > i { display:block; height:100%; background:var(--accent); width:0; transition:width .2s; }
   .prog { font-size:11.5px; color:var(--muted); min-height:16px; }
-  .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; }
-  .stat { background:var(--card); border-radius:8px; padding:9px 10px; }
-  .stat .n { font-size:18px; font-weight:700; }
-  .stat .l { font-size:11px; color:var(--muted); }
+  .summary { margin-top:12px; padding:10px 0; border-block:1px solid var(--line); color:var(--muted); font-size:12px; }
   .hint { font-size:11.5px; color:var(--muted); margin-top:10px; }
   .err { color:#e5534b; font-size:12px; margin-top:8px; }
   a { color:var(--accent); }
@@ -40,21 +37,15 @@
   <div class="status"><span class="dot" id="dot"></span><span id="status">세션 확인 중…</span></div>
 
   <button id="analyze" disabled>서재 분석</button>
+  <button class="sub" id="open-dashboard">서지 관리 열기</button>
   <div class="bar" id="barwrap" hidden><i id="bar"></i></div>
   <div class="prog" id="prog"></div>
   <div class="err" id="err"></div>
 
   <div id="summary" hidden>
-    <div class="grid">
-      <div class="stat"><div class="n" id="c-new">–</div><div class="l">미보유 신권</div></div>
-      <div class="stat"><div class="n" id="c-unread">–</div><div class="l">안 읽은 책</div></div>
-      <div class="stat"><div class="n" id="c-finished">–</div><div class="l">다 읽은 책</div></div>
-      <div class="stat"><div class="n" id="c-author">–</div><div class="l">작가 신작</div></div>
-      <div class="stat"><div class="n" id="c-owned">–</div><div class="l">소장 시리즈/책</div></div>
-      <div class="stat"><div class="n" id="c-interest">–</div><div class="l">관심 작품</div></div>
-    </div>
+    <div class="summary" id="summary-text"></div>
     <div class="hint" id="genat"></div>
-    <button class="sub" id="open-library">리디 서재에서 결과 보기 →</button>
+    <button class="sub" id="open-library">RIDI 구매 목록 열기</button>
   </div>
 
   <div class="hint" id="loginhint" hidden>

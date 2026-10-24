@@ -11,12 +11,7 @@ function setProgress(done, total, message) {
 function renderSummary(r) {
   if (!r) return;
   $("summary").hidden = false;
-  $("c-new").textContent = r.counts.newVolume;
-  $("c-unread").textContent = r.counts.unread;
-  $("c-finished").textContent = r.counts.finished;
-  $("c-author").textContent = r.counts.authorNew;
-  $("c-owned").textContent = r.ownedUnits;
-  $("c-interest").textContent = r.counts.interest ?? "–";
+  $("summary-text").textContent = `소장 ${r.ownedUnits.toLocaleString("ko-KR")} · 신권 ${r.counts.newVolume.toLocaleString("ko-KR")} · 미독 ${r.counts.unread.toLocaleString("ko-KR")} · 완독 ${r.counts.finished.toLocaleString("ko-KR")}`;
   const secs = Math.round((r.elapsedMs ?? 0) / 1000);
   const when = new Date(r.generatedAt).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" });
   $("genat").textContent = `${when} 분석 · ${secs}초 소요`;
@@ -70,7 +65,11 @@ $("analyze").addEventListener("click", async () => {
 });
 
 $("open-library").addEventListener("click", () => {
-  chrome.tabs.create({ url: "https://library.ridibooks.com/" });
+  chrome.tabs.create({ url: "https://ridibooks.com/library/books" });
+});
+
+$("open-dashboard").addEventListener("click", () => {
+  void send("openDashboard", { hash: "all" });
 });
 
 // 초기화: 세션 + 이전 결과 로드

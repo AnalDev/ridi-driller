@@ -36,16 +36,6 @@
     {
       "matches": [
         "https://library.ridibooks.com/*",
-        "*://ridibooks.com/library*",
-        "*://ridibooks.com/account/library*"
-      ],
-      "js": ["src/content.js"],
-      "css": ["src/content.css"],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": [
-        "https://library.ridibooks.com/*",
         "https://ridibooks.com/library*",
         "https://ridibooks.com/comics/new-releases*"
       ],

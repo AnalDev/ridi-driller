@@ -13,9 +13,10 @@ const manifest = JSON.parse(
 ) as Manifest;
 
 describe("RIDI extension manifest", () => {
-  it("injects the result panel into the current RIDI library domain", () => {
+  it("injects only the inline page enhancer into the current RIDI library domain", () => {
     const matches = manifest.content_scripts.flatMap((entry) => entry.matches);
     expect(matches).toContain("https://library.ridibooks.com/*");
+    expect(manifest.content_scripts.flatMap((entry) => entry.js)).not.toContain("src/content.js");
   });
 
   it("enhances the library and current comics new-release pages", () => {
