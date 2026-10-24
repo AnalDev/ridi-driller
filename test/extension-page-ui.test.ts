@@ -7,9 +7,18 @@ const viewSource = readFileSync(new URL("../extension/src/page-view.js", import.
 describe("RIDI inline page tools", () => {
   it("mounts list and detail controls in the document flow", () => {
     expect(source).not.toContain("position:fixed");
+    expect(source).toContain("outsideSiblingLayout(list)");
+    expect(source).toContain('new Set(["flex", "inline-flex", "grid", "inline-grid"])');
+    expect(source).toContain("grid-column:1 / -1");
     expect(source).toContain('insertAdjacentElement("beforebegin", host)');
     expect(source).toContain('insertAdjacentElement("afterend", host)');
     expect(source).not.toContain("ridi-driller-card-hidden");
+  });
+
+  it("clears stale analysis progress when a fresh local index arrives", () => {
+    expect(source).toContain("const previousGeneratedAt = pageIndex?.generatedAt ?? null");
+    expect(source).toContain('pageIndex.generatedAt !== previousGeneratedAt) progressMessage = ""');
+    expect(source).toContain('progressMessage = "전체 서재를 분석하는 중"');
   });
 
   it("offers a combined unpurchased-or-unread filter", () => {

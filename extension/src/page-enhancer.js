@@ -253,15 +253,28 @@
     });
   }
 
+  function outsideSiblingLayout(node) {
+    const siblingLayouts = new Set(["flex", "inline-flex", "grid", "inline-grid"]);
+    let anchor = node;
+    while (anchor.parentElement && !anchor.parentElement.matches("body,html")) {
+      const parent = anchor.parentElement;
+      if (!siblingLayouts.has(getComputedStyle(parent).display)) break;
+      anchor = parent;
+    }
+    return anchor;
+  }
+
   function mountInline(host) {
     const list = currentCards[0]?.card?.parentElement;
     if (list && !list.matches("body,html")) {
-      list.insertAdjacentElement("beforebegin", host);
+      outsideSiblingLayout(list).insertAdjacentElement("beforebegin", host);
       return;
     }
     const navLink = document.querySelector('a[href*="/library/books"],a[href*="/comics/new-releases"]');
     const main = document.querySelector("main,[role='main']");
-    if (main) main.prepend(host);
+    if (main && ["flex", "inline-flex", "grid", "inline-grid"].includes(getComputedStyle(main).display)) {
+      main.insertAdjacentElement("beforebegin", host);
+    } else if (main) main.prepend(host);
     else if (navLink?.parentElement?.parentElement) navLink.parentElement.parentElement.insertAdjacentElement("afterend", host);
     else document.body.prepend(host);
   }
@@ -406,7 +419,7 @@
 
   function integratedStyles() {
     return `
-      :host { display:block; width:100%; margin:18px 0 24px; color:#202124; font:14px/1.45 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif; letter-spacing:0; }
+      :host { display:block; grid-column:1 / -1; width:100%; min-width:0; max-width:100%; margin:18px 0 24px; color:#202124; font:14px/1.45 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif; letter-spacing:0; }
       * { box-sizing:border-box; }
       button,input,select { font:inherit; letter-spacing:0; }
       button,a,input,select { outline-offset:2px; }
@@ -515,7 +528,7 @@
     if (!pageIndex || (kind === "purchases" && !Array.isArray(pageIndex.catalog))) {
       const analyze = el("button", "", "서재 분석");
       analyze.type = "button";
-      analyze.addEventListener("click", () => void send("analyze", { opts: { withAuthors: true } }));
+      analyze.addEventListener("click", () => void refreshCatalog(kind, true));
       actions.append(analyze);
     }
     const sync = el("button", "", ["purchases", "interest"].includes(kind) ? "서재 다시 분석" : "전체 새로고침");
@@ -801,7 +814,16 @@
       progressMessage = "전체 서재를 다시 분석하는 중";
       scheduleRender();
       const result = await send("analyze", { opts: { withAuthors: true } });
-      if (result?.error) progressMessage = result.error;
+      if (result?.error === "이미 분석 중입니다.") {
+        progressMessage = "전체 서재를 분석하는 중";
+      } else if (result?.error) {
+        progressMessage = result.error;
+      } else if (result) {
+        progressMessage = "";
+        await loadStorage();
+      } else {
+        progressMessage = "서재 분석을 시작하지 못했습니다. 잠시 뒤 다시 시도하세요.";
+      }
     } else if (kind === "releases") {
       progressMessage = "전체 신간을 장르별로 불러오는 중";
       scheduleRender();
@@ -821,6 +843,7 @@
   }
 
   async function loadStorage() {
+    const previousGeneratedAt = pageIndex?.generatedAt ?? null;
     const stored = await chrome.storage.local.get([
       "ridi_page_index",
       "ridi_release_catalog",
@@ -832,6 +855,7 @@
     shelfCatalog = stored.ridi_shelf_catalog ?? null;
     preferences = stored[PREFS_KEY] ?? {};
     lookup = createPageLookup(pageIndex);
+    if (pageIndex?.generatedAt && pageIndex.generatedAt !== previousGeneratedAt) progressMessage = "";
     scheduleRender();
   }
 
