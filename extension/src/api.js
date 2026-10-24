@@ -1,7 +1,7 @@
 // 리디 내부 API 클라이언트 (확장 배경 워커용).
 //
 // 핵심: 이 코드는 브라우저 안에서 돌기 때문에 쿠키 항아리를 그대로 쓴다.
-// credentials:"include" 로 요청하면 ridi-at·cf_clearance 가 자동으로 실린다 —
+// credentials:"include" 로 요청하면 ridi-at, ridi-rt, cf_clearance 가 자동으로 실린다.
 // 기존 Next.js 서버처럼 Cookie 헤더를 손으로 붙일 필요가 없다.
 // (host_permissions 에 *.ridibooks.com 이 있어 CORS 도 통과.)
 
@@ -9,11 +9,23 @@ const LIB_API = "https://library-api.ridibooks.com";
 const BOOK_API = "https://book-api.ridibooks.com";
 const SEARCH_API = "https://search-api.ridibooks.com";
 const STORE = "https://ridibooks.com";
+const TOKEN_REFRESH_URL = "https://account.ridibooks.com/ridi/token";
+
+let authEpoch = 0;
+let refreshPromise = null;
 
 export class RidiAuthError extends Error {
   constructor(status) {
-    super(`리디 인증 실패 (${status}) — 로그인이 만료되었거나 유효하지 않습니다.`);
+    super(`리디 인증 실패 (${status}): 로그인이 만료되었거나 유효하지 않습니다.`);
     this.name = "RidiAuthError";
+    this.status = status;
+  }
+}
+
+export class RidiCloudflareError extends Error {
+  constructor(status = 403) {
+    super(`리디 접근 차단 (${status}): Cloudflare 확인이 필요합니다.`);
+    this.name = "RidiCloudflareError";
     this.status = status;
   }
 }
@@ -38,13 +50,57 @@ async function mapLimit(items, limit, fn, onProgress) {
   return results;
 }
 
-async function authGet(url) {
+async function requestTokenRefresh() {
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let res;
+    try {
+      res = await fetch(TOKEN_REFRESH_URL, {
+        method: "POST",
+        credentials: "include",
+        headers: { Accept: "application/json, text/plain, */*" },
+        cache: "no-store",
+      });
+    } catch (err) {
+      lastError = err;
+    }
+    if (res) {
+      if (res.status === 401) throw new RidiAuthError(res.status);
+      if (res.status === 403) throw new RidiCloudflareError(res.status);
+      if (res.ok) {
+        authEpoch += 1;
+        return;
+      }
+      lastError = new Error(`리디 토큰 갱신 실패 (${res.status})`);
+      if (res.status < 500) throw lastError;
+    }
+    if (attempt < 2) await sleep(1000);
+  }
+  throw lastError ?? new Error("리디 토큰 갱신 실패");
+}
+
+export async function refreshAccessToken() {
+  if (!refreshPromise) {
+    refreshPromise = requestTokenRefresh().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
+export async function authGet(url, retryAuth = true) {
+  const requestEpoch = authEpoch;
   const res = await fetch(url, {
-    credentials: "include", // ← 브라우저 세션 쿠키 자동 첨부
+    credentials: "include",
     headers: { Accept: "application/json, text/plain, */*" },
     cache: "no-store",
   });
-  if (res.status === 401 || res.status === 403) throw new RidiAuthError(res.status);
+  if (res.status === 401 && retryAuth) {
+    if (authEpoch === requestEpoch) await refreshAccessToken();
+    return authGet(url, false);
+  }
+  if (res.status === 401) throw new RidiAuthError(res.status);
+  if (res.status === 403) throw new RidiCloudflareError(res.status);
   if (!res.ok) throw new Error(`리디 ${res.status}: ${url}`);
   return res.json();
 }
@@ -54,26 +110,50 @@ async function publicGet(url, retries = 2) {
     try {
       const res = await fetch(url, { headers: { Accept: "application/json" }, cache: "no-store" });
       if (res.ok) return res.json();
-      if (res.status === 401 || res.status === 403) throw new RidiAuthError(res.status);
+      if (res.status === 401) throw new RidiAuthError(res.status);
+      if (res.status === 403) throw new RidiCloudflareError(res.status);
       throw new Error(`리디 ${res.status}`);
     } catch (err) {
-      if (err instanceof RidiAuthError) throw err;
+      if (err instanceof RidiAuthError || err instanceof RidiCloudflareError) throw err;
       if (attempt < retries) await sleep(400 * (attempt + 1));
       else throw err;
     }
   }
 }
 
-/** 로그인 여부 확인 — ridi-at 쿠키 존재/만료. */
-export async function getSession() {
+function getCookie(name) {
   return new Promise((resolve) => {
-    chrome.cookies.get({ url: STORE, name: "ridi-at" }, (cookie) => {
-      if (!cookie) return resolve({ loggedIn: false });
-      const expiresAt = cookie.expirationDate ? cookie.expirationDate * 1000 : null;
-      const expired = expiresAt != null && expiresAt < Date.now();
-      resolve({ loggedIn: !expired, expiresAt });
-    });
+    chrome.cookies.get({ url: STORE, name }, resolve);
   });
+}
+
+function isUsableCookie(cookie) {
+  return Boolean(cookie && (!cookie.expirationDate || cookie.expirationDate * 1000 > Date.now()));
+}
+
+/** 로그인 여부 확인. 액세스 토큰이 만료됐으면 브라우저의 리프레시 세션으로 복구한다. */
+export async function getSession() {
+  let [accessCookie, refreshCookie] = await Promise.all([getCookie("ridi-at"), getCookie("ridi-rt")]);
+  if (isUsableCookie(accessCookie)) {
+    return {
+      loggedIn: true,
+      expiresAt: accessCookie.expirationDate ? accessCookie.expirationDate * 1000 : null,
+      refreshable: isUsableCookie(refreshCookie),
+    };
+  }
+  if (!isUsableCookie(refreshCookie)) return { loggedIn: false, refreshable: false };
+  try {
+    await refreshAccessToken();
+    accessCookie = await getCookie("ridi-at");
+  } catch {
+    return { loggedIn: false, refreshable: true };
+  }
+  return {
+    loggedIn: isUsableCookie(accessCookie),
+    expiresAt: accessCookie?.expirationDate ? accessCookie.expirationDate * 1000 : null,
+    refreshable: true,
+    refreshed: true,
+  };
 }
 
 // ---- library-api: 소장 유닛 (인증 필요) ----

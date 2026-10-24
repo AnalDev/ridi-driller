@@ -3,6 +3,7 @@
 
 import {
   RidiAuthError,
+  RidiCloudflareError,
   fetchAllUnits,
   fetchAuthorBooksMany,
   fetchBooksMeta,
@@ -83,7 +84,9 @@ async function analyze({ withAuthors = true } = {}) {
     const payload =
       err instanceof RidiAuthError
         ? { type: "error", kind: "auth", message: err.message }
-        : { type: "error", kind: "network", message: String(err?.message ?? err) };
+        : err instanceof RidiCloudflareError
+          ? { type: "error", kind: "cloudflare", message: err.message }
+          : { type: "error", kind: "network", message: String(err?.message ?? err) };
     broadcast(payload);
     return { error: payload.message, kind: payload.kind };
   } finally {
