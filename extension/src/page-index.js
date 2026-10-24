@@ -93,9 +93,18 @@ export function classifyPageBook(lookup, { bookId, title, pageKind }) {
     statuses.push({ key: owned.exact ? "owned" : "ownedSeries", record: owned.record });
   }
 
-  for (const key of STATUS_KEYS) {
+  for (const key of STATUS_KEYS.filter((statusKey) => !["unread", "finished"].includes(statusKey))) {
     const match = findRecord(lookup.statuses[key], bookId, normalizedTitle);
     if (match) statuses.push({ key, record: match.record });
+  }
+
+  const unread = findRecord(lookup.statuses.unread, bookId, normalizedTitle);
+  const finished = findRecord(lookup.statuses.finished, bookId, normalizedTitle);
+  if (unread || finished) {
+    const selected = unread && finished
+      ? (unread.exact === finished.exact ? unread : (unread.exact ? unread : finished))
+      : (unread ?? finished);
+    statuses.push({ key: selected === finished ? "finished" : "unread", record: selected.record });
   }
 
   const interest = findRecord(lookup.interest, bookId, normalizedTitle);

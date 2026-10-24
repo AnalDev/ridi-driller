@@ -60,4 +60,24 @@ describe("RIDI page enhancement index", () => {
         .map((status) => status.key),
     ).toEqual(["interest"]);
   });
+
+  it("keeps unread and finished mutually exclusive", () => {
+    const lookup = createPageLookup({
+      owned: [],
+      interest: [],
+      statuses: {
+        unread: [{ bId: "unread-id", title: "같은 시리즈" }],
+        finished: [{ bId: "finished-id", title: "같은 시리즈" }],
+      },
+    });
+
+    expect(
+      classifyPageBook(lookup, { bookId: "finished-id", title: "같은 시리즈", pageKind: "interest" })
+        .map((status) => status.key),
+    ).toEqual(["finished", "interest"]);
+    expect(
+      classifyPageBook(lookup, { bookId: "unknown", title: "같은 시리즈", pageKind: "interest" })
+        .map((status) => status.key),
+    ).toEqual(["unread", "interest"]);
+  });
 });
