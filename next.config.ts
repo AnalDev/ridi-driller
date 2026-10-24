@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  turbopack: {
+    root: process.cwd(),
+  },
   // Standalone server bundle for the Tauri desktop sidecar (self-contained
   // .next/standalone/server.js with a minimal node_modules subset).
   output: "standalone",
