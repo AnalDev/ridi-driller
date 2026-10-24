@@ -15,6 +15,15 @@ import { buildRecommendations } from "./recommend.js";
 const CACHE_KEY = "ridi_analysis";
 let running = false;
 
+function limitedRecommendations(recommendations) {
+  return {
+    newVolume: recommendations.newVolume.slice(0, 100),
+    unread: recommendations.unread.slice(0, 100),
+    finished: recommendations.finished.slice(0, 100),
+    authorNew: recommendations.authorNew.slice(0, 100),
+  };
+}
+
 /** 진행률을 팝업·컨텐츠로 방송 (수신자 없으면 조용히 무시). */
 function broadcast(msg) {
   chrome.runtime.sendMessage(msg).catch(() => {});
@@ -62,8 +71,9 @@ async function analyze({ withAuthors = true } = {}) {
     }
 
     const recs = buildRecommendations({ units, meta, lastRead, authorBooks });
+    const generatedAt = Date.now();
     const result = {
-      generatedAt: Date.now(),
+      generatedAt,
       elapsedMs: Date.now() - started,
       ownedUnits: units.length,
       counts: {
@@ -72,10 +82,7 @@ async function analyze({ withAuthors = true } = {}) {
         finished: recs.finished.length,
         authorNew: recs.authorNew.length,
       },
-      // 패널에 넣기 좋게 상위만 저장 (용량 절약)
-      newVolume: recs.newVolume.slice(0, 100),
-      unread: recs.unread.slice(0, 100),
-      authorNew: recs.authorNew.slice(0, 100),
+      ...limitedRecommendations(recs),
     };
     await chrome.storage.local.set({ [CACHE_KEY]: result });
     broadcast({ type: "done", result });
@@ -94,23 +101,6 @@ async function analyze({ withAuthors = true } = {}) {
   }
 }
 
-/** 서재를 BookDriller 서버(:3210)로 동기화 (선택 기능). */
-async function syncToBookdriller(base = "http://localhost:3210") {
-  const cache = (await chrome.storage.local.get(CACHE_KEY))[CACHE_KEY];
-  if (!cache) return { error: "먼저 서재를 분석하세요." };
-  try {
-    const res = await fetch(`${base}/api/ext/ridi-analysis`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(cache),
-    });
-    if (!res.ok) return { error: `BookDriller 응답 ${res.status}` };
-    return await res.json();
-  } catch (err) {
-    return { error: `BookDriller(:3210) 연결 실패: ${String(err?.message ?? err)}` };
-  }
-}
-
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     switch (msg?.cmd) {
@@ -122,9 +112,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         break;
       case "getCache":
         sendResponse((await chrome.storage.local.get(CACHE_KEY))[CACHE_KEY] ?? null);
-        break;
-      case "sync":
-        sendResponse(await syncToBookdriller(msg.base));
         break;
       case "running":
         sendResponse({ running });

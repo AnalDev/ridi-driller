@@ -1,4 +1,4 @@
-// 인페이지 인핸서 — 리디 서재 페이지(ridibooks.com/library) 안에 분석 패널을 띄운다.
+// 인페이지 인핸서 — 리디 서재 페이지(library.ridibooks.com) 안에 분석 패널을 띄운다.
 // 배경 워커가 만든 캐시를 읽어 미보유 신권/안 읽은 책/작가 신작을 리디 화면 위에 오버레이한다.
 // (사이트를 "개조"하는 부분: 리디 DOM에 우리 UI를 주입.)
 
@@ -54,6 +54,7 @@ function buildPanel(cache) {
   const TABS = [
     ["newVolume", `미보유 신권 ${cache.counts.newVolume}`, cache.newVolume],
     ["unread", `안 읽은 책 ${cache.counts.unread}`, cache.unread],
+    ["finished", `다 읽음 ${cache.counts.finished}`, cache.finished],
     ["authorNew", `작가 신작 ${cache.counts.authorNew}`, cache.authorNew],
   ];
   TABS.forEach(([key, label, list], i) => {

@@ -13,6 +13,7 @@ function renderSummary(r) {
   $("summary").hidden = false;
   $("c-new").textContent = r.counts.newVolume;
   $("c-unread").textContent = r.counts.unread;
+  $("c-finished").textContent = r.counts.finished;
   $("c-author").textContent = r.counts.authorNew;
   $("c-owned").textContent = r.ownedUnits;
   const secs = Math.round((r.elapsedMs ?? 0) / 1000);
@@ -30,7 +31,12 @@ chrome.runtime.onMessage.addListener((msg) => {
     renderSummary(msg.result);
   } else if (msg.type === "error") {
     $("analyze").disabled = false;
-    $("err").textContent = msg.kind === "auth" ? "로그인이 만료되었습니다. 리디북스에 다시 로그인하세요." : msg.message;
+    $("err").textContent =
+      msg.kind === "auth"
+        ? "로그인이 만료되었습니다. RIDI에 다시 로그인하세요."
+        : msg.kind === "cloudflare"
+          ? "RIDI 서재를 직접 열어 Cloudflare 확인을 마친 뒤 다시 분석하세요."
+          : msg.message;
   }
 });
 
@@ -63,14 +69,7 @@ $("analyze").addEventListener("click", async () => {
 });
 
 $("open-library").addEventListener("click", () => {
-  chrome.tabs.create({ url: "https://ridibooks.com/account/library" });
-});
-
-$("sync").addEventListener("click", async () => {
-  $("sync").textContent = "전송 중…";
-  const r = await send("sync");
-  $("sync").textContent = r?.error ? `⚠ ${r.error}` : `✔ 전송 완료`;
-  setTimeout(() => ($("sync").textContent = "BookDriller(:3210)로 보내기"), 3000);
+  chrome.tabs.create({ url: "https://library.ridibooks.com/" });
 });
 
 // 초기화: 세션 + 이전 결과 로드

@@ -1,14 +1,12 @@
 {
   "manifest_version": 3,
   "name": "리디 드릴러 — 서재 인핸서",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "내 리디 서재를 브라우저 세션 그대로 분석해 미보유 신권·안 읽은 책·작가 신작을 리디 페이지 안에 띄워줍니다.",
   "permissions": ["cookies", "storage"],
   "host_permissions": [
     "*://ridibooks.com/*",
-    "*://*.ridibooks.com/*",
-    "http://localhost:3210/*",
-    "http://127.0.0.1:3210/*"
+    "*://*.ridibooks.com/*"
   ],
   "background": {
     "service_worker": "src/background.js",
@@ -30,7 +28,11 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://ridibooks.com/library*", "*://ridibooks.com/account/library*"],
+      "matches": [
+        "https://library.ridibooks.com/*",
+        "*://ridibooks.com/library*",
+        "*://ridibooks.com/account/library*"
+      ],
       "js": ["src/content.js"],
       "css": ["src/content.css"],
       "run_at": "document_idle"

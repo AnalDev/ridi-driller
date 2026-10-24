@@ -159,8 +159,16 @@ export async function getSession() {
 // ---- library-api: 소장 유닛 (인증 필요) ----
 
 export async function fetchLibraryCount() {
-  const r = await authGet(`${LIB_API}/items/main/count/`);
-  return r.unit_total_count ?? 0;
+  const counts = await fetchLibraryCounts();
+  return counts.unit_total_count;
+}
+
+export async function fetchLibraryCounts() {
+  const result = await authGet(`${LIB_API}/items/main/count/`);
+  return {
+    item_total_count: result.item_total_count ?? 0,
+    unit_total_count: result.unit_total_count ?? 0,
+  };
 }
 
 const PAGE = 300;
