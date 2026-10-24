@@ -6,5 +6,7 @@ output="$repo_root/public/ridi-driller-extension.zip"
 
 rm -f "$output"
 cd "$repo_root/extension"
-zip -q -r "$output" manifest.json README.md icons src
+find manifest.json README.md icons src -type f -print \
+  | LC_ALL=C sort \
+  | zip -q -X "$output" -@
 printf 'Created %s\n' "$output"
