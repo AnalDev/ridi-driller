@@ -47,7 +47,7 @@ Vercel에서 개인 서재를 직접 분석하는 방식은 Cloudflare가 서버
 4. 압축을 푼 폴더에서 `manifest.json`이 있는 폴더를 선택합니다.
 5. RIDI 로그인 후 확장 아이콘에서 `서재 분석`을 누릅니다.
 
-분석 결과는 [RIDI 서재](https://library.ridibooks.com/) 오른쪽 패널에 표시됩니다.
+분석 결과는 [RIDI 서재](https://ridibooks.com/library) 오른쪽 패널에 표시됩니다.
 
 확장 버전 `0.3.2`부터 구매 목록·내 책장·관심 작품과 [만화 신작](https://ridibooks.com/comics/new-releases?tab=CATEGORY_COMIC_ALL) 카드에 소장·읽기·관심 상태 배지와 필터 도구 모음이 추가됩니다.
 

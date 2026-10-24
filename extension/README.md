@@ -32,9 +32,9 @@ RIDI 화면에서 처음 실행한 경우 하단 도구 모음의 `분석` 버�
 
 | RIDI 화면 | 주소 | 추가 기능 |
 |---|---|---|
-| 구매 목록 | [library.ridibooks.com/books](https://library.ridibooks.com/books) | 소장·읽기·신권·관심 배지와 상태 필터 |
-| 내 책장 | [library.ridibooks.com/shelves](https://library.ridibooks.com/shelves) 및 개별 책장 | 책장에 담긴 작품의 소장·읽기·신권·관심 배지와 상태 필터 |
-| 관심 작품 | [library.ridibooks.com/serial-preferences](https://library.ridibooks.com/serial-preferences) | 관심·새 이야기 배지와 상태 필터 |
+| 구매 목록 | [ridibooks.com/library/books](https://ridibooks.com/library/books) | 소장·읽기·신권·관심 배지와 상태 필터 |
+| 내 책장 | [ridibooks.com/library/shelves](https://ridibooks.com/library/shelves) 및 개별 책장 | 책장에 담긴 작품의 소장·읽기·신권·관심 배지와 상태 필터 |
+| 관심 작품 | [ridibooks.com/library/serial-preferences](https://ridibooks.com/library/serial-preferences) | 관심·새 이야기 배지와 상태 필터 |
 | 만화 신작 | [ridibooks.com/comics/new-releases](https://ridibooks.com/comics/new-releases?tab=CATEGORY_COMIC_ALL) | 소장 여부·미보유 신권·내 작가·관심 배지와 상태 필터 |
 
 RIDI 원본 카드와 버튼은 교체하지 않습니다.
@@ -72,7 +72,7 @@ RIDI 로그인 페이지에서 로그인한 뒤 확장 팝업을 다시 엽니�
 
 ### Cloudflare 403
 
-[RIDI 서재](https://library.ridibooks.com/)를 직접 열어 정상 표시되는지 확인한 뒤 확장에서 다시 분석합니다.
+[RIDI 서재](https://ridibooks.com/library)를 직접 열어 정상 표시되는지 확인한 뒤 확장에서 다시 분석합니다.
 
 브라우저 자체에서도 챌린지가 보이면 해당 확인을 먼저 완료해야 합니다.
 
@@ -104,7 +104,7 @@ RIDI가 화면 DOM이나 내부 API를 변경하면 확장 업데이트가 필�
 - `book-api.ridibooks.com/books?b_ids=`
 - `ridibooks.com/api/user/reading-histories/series/{id}/latest`
 - `search-api.ridibooks.com/search`
-- `api.ridibooks.com/graphql`의 `userInterestBook` 읽기 쿼리 (현재 RIDI 번들에서 확인, 모의 응답 검증)
+- `api.ridibooks.com/graphql`의 `userInterestBook` 읽기 쿼리 (현재 RIDI 번들, 로그인 실호출, 모의 응답 검증)
 - `account.ridibooks.com/ridi/token`
 
 내부 API는 공개 계약이 아니므로 예고 없이 변경될 수 있습니다.
