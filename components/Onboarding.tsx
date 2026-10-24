@@ -206,7 +206,8 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
             <ol className="mt-1 list-decimal space-y-0.5 pl-5">
               <li>ridibooks.com 로그인</li>
               <li>F12 → Application → Cookies → https://ridibooks.com</li>
-              <li><code className="text-emerald-300">ridi-at</code> 값 복사 (차단되면 <code>cf_clearance</code>도)</li>
+              <li><code className="text-emerald-300">ridi-at</code> 값 복사</li>
+              <li>Cloudflare 403이면 RIDI 문서 요청을 Copy as cURL로 복사해 같은 User-Agent까지 함께 입력</li>
             </ol>
           </div>
           <div>
@@ -252,8 +253,8 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
           <div>
             <p className="font-medium text-neutral-200">유출 의심/사용 종료 시 초기화</p>
             <ol className="mt-1 list-decimal space-y-0.5 pl-5">
-              <li>앱에서 <b>로그아웃</b> → 서버 세션 파일 삭제 + <code>rd_sid</code> 제거</li>
-              <li>로컬 데이터 삭제: <code className="text-emerald-300">rm -rf data</code> (암호화 토큰·스냅샷·키 전부)</li>
+              <li>앱에서 <b>로그아웃</b> → 브라우저의 휘발성 <code>rd_sess</code> 제거</li>
+              <li>로컬 분석 캐시 삭제: <code className="text-emerald-300">rm -rf data</code></li>
               <li>리디 쪽 무효화(가장 확실): ridibooks.com 로그아웃 / 비밀번호 변경 / 기기 로그아웃 관리</li>
               <li>그냥 두어도 약 24시간 뒤 자동 만료 — 단, 유출 시엔 위 1~3을 즉시</li>
             </ol>
@@ -261,7 +262,8 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
           <div>
             <p className="font-medium text-neutral-200">Vercel 배포 (동작함)</p>
             <ul className="mt-1 list-disc space-y-0.5 pl-5">
-              <li>토큰을 서버에 저장하지 않고 <b>httpOnly 쿠키</b>에만 두므로 Vercel에서도 로그인·조회가 됩니다. (Cloudflare는 Vercel을 막지 않음 — 실측 확인)</li>
+              <li>토큰을 서버에 영구 저장하지 않고 <b>httpOnly 쿠키</b>에만 두므로 Vercel에서도 로그인·조회할 수 있습니다.</li>
+              <li>Cloudflare 정책은 변할 수 있으므로 403이면 같은 브라우저에서 복사한 cURL을 입력하세요.</li>
               <li>서버는 무상태라 <b>여러 명이 각자 자기 쿠키로 안전하게</b> 사용 가능. 서버엔 아무 토큰도 안 남음.</li>
               <li>전체 동기화는 수 분 소요 — 중간에 끊겨도 부분 결과는 스트리밍으로 표시되고, <b>빠른 업데이트</b>로 이어갈 수 있음.</li>
               <li>공개 URL이니 원치 않으면 접근 제어를 추가하세요. 가장 안전한 건 <b>로컬 실행</b>.</li>
