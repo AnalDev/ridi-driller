@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 interface Manifest {
   version: string;
+  permissions: string[];
   host_permissions: string[];
   content_scripts: { matches: string[]; js: string[] }[];
   web_accessible_resources: { resources: string[]; matches: string[] }[];
@@ -34,6 +35,12 @@ describe("RIDI extension manifest", () => {
     expect(manifest.host_permissions).toEqual(["*://ridibooks.com/*", "*://*.ridibooks.com/*"]);
     expect(JSON.stringify(manifest)).not.toContain("vercel.app");
     expect(JSON.stringify(manifest)).not.toContain("localhost");
+  });
+
+  it("uses temporary active-tab access for user-triggered bookstore imports", () => {
+    expect(manifest.permissions).toContain("activeTab");
+    expect(manifest.permissions).toContain("scripting");
+    expect(manifest).not.toHaveProperty("optional_host_permissions");
   });
 
   it("ships the browser-session release", () => {

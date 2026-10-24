@@ -1,3 +1,5 @@
+import { detectStore, STORE_DEFINITIONS } from "./store-library.js";
+
 const $ = (id) => document.getElementById(id);
 const send = (cmd, extra = {}) => chrome.runtime.sendMessage({ cmd, ...extra });
 
@@ -72,8 +74,41 @@ $("open-dashboard").addEventListener("click", () => {
   void send("openDashboard", { hash: "all" });
 });
 
+$("capture-store").addEventListener("click", async () => {
+  $("capture-store").disabled = true;
+  $("err").textContent = "";
+  $("prog").textContent = "현재 구매내역 페이지를 읽는 중…";
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) throw new Error("현재 탭을 확인할 수 없습니다.");
+    const [execution] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ["src/store-capture-content.js"],
+    });
+    const result = execution?.result;
+    if (result?.kind === "notPurchasePage") {
+      throw new Error("구매내역 페이지에서 실행해 주세요. 일반 상품·추천 페이지는 가져오지 않습니다.");
+    }
+    if (!result?.ok) throw new Error("구매 기록을 가져오지 못했습니다.");
+    $("prog").textContent = `현재 화면 ${Number(result.visibleCount ?? 0).toLocaleString("ko-KR")}개 확인 · 누적 ${Number(result.count ?? 0).toLocaleString("ko-KR")}개 저장`;
+  } catch (error) {
+    $("err").textContent = String(error?.message ?? error);
+    $("prog").textContent = "";
+  } finally {
+    $("capture-store").disabled = false;
+  }
+});
+
 // 초기화: 세션 + 이전 결과 로드
 (async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab?.url) {
+    const source = detectStore(new URL(tab.url).hostname);
+    if (source && source !== "ridi") {
+      $("capture-store").hidden = false;
+      $("capture-store").textContent = `${STORE_DEFINITIONS[source].label} 구매 기록 가져오기`;
+    }
+  }
   await refreshSession();
   const cache = await send("getCache");
   if (cache) renderSummary(cache);

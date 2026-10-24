@@ -15,10 +15,12 @@ import { buildRecommendations } from "./recommend.js";
 import { buildPageIndex } from "./page-index.js";
 import { buildCatalog } from "./catalog.js";
 import { mergeReadingNotes } from "./reading-notes.js";
+import { mergeCapturedStoreRecords } from "./store-library.js";
 
 const CACHE_KEY = "ridi_analysis";
 const PAGE_INDEX_KEY = "ridi_page_index";
 const READING_NOTES_KEY = "ridi_reading_notes";
+const STORE_LIBRARY_KEY = "bookstore_libraries";
 let running = false;
 
 /** 진행률을 팝업·컨텐츠로 방송 (수신자 없으면 조용히 무시). */
@@ -158,6 +160,19 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         await chrome.storage.local.set({ [READING_NOTES_KEY]: records });
         broadcast({ type: "readingNotesUpdated", count: records.length });
         sendResponse({ ok: true, count: records.length });
+        break;
+      }
+      case "captureStoreRecords": {
+        const stored = await chrome.storage.local.get(STORE_LIBRARY_KEY);
+        const libraries = mergeCapturedStoreRecords(
+          stored[STORE_LIBRARY_KEY],
+          msg.source,
+          Array.isArray(msg.records) ? msg.records : [],
+        );
+        await chrome.storage.local.set({ [STORE_LIBRARY_KEY]: libraries });
+        const count = libraries[msg.source]?.length ?? 0;
+        broadcast({ type: "storeLibraryUpdated", source: msg.source, count });
+        sendResponse({ ok: true, count });
         break;
       }
       case "running":
