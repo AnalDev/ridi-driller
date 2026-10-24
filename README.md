@@ -7,6 +7,7 @@
 | 기능 | 권장 실행 위치 | 인증 방식 |
 |---|---|---|
 | 개인 RIDI 서재 분석 | Chrome 확장 | 현재 브라우저의 RIDI 세션 자동 사용 |
+| RIDI 구매 목록·내 책장·관심 작품·만화 신작 인핸서 | Chrome 확장 | 분석 색인과 현재 RIDI DOM을 브라우저 안에서 결합 |
 | 공개 도서·무료 eBook 검색 | 웹사이트 | 인증 불필요 |
 | 수동 서버 분석 | 로컬 웹앱 | `ridi-at` 직접 입력 |
 
@@ -48,11 +49,15 @@ Vercel에서 개인 서재를 직접 분석하는 방식은 Cloudflare가 서버
 
 분석 결과는 [RIDI 서재](https://library.ridibooks.com/) 오른쪽 패널에 표시됩니다.
 
+확장 버전 `0.3.0`부터 구매 목록·내 책장·관심 작품과 [만화 신작](https://ridibooks.com/comics/new-releases?tab=CATEGORY_COMIC_ALL) 카드에 소장·읽기·관심 상태 배지와 필터 도구 모음이 추가됩니다.
+
+배지는 RIDI 원본 DOM을 교체하지 않고 별도 Shadow DOM으로 삽입되며, 필터를 해제하면 숨겼던 원본 카드가 모두 복구됩니다.
+
 상세 사용법과 오류 해결은 [확장 프로그램 안내](extension/README.md)를 참고하세요.
 
 ## 동작 원리
 
-리디는 공개 API가 없어 웹 클라이언트가 쓰는 내부 엔드포인트를 이용합니다 (모두 실제 검증됨).
+리디는 공개 API가 없어 웹 클라이언트가 쓰는 내부 엔드포인트를 이용하며, 실응답·배포 번들·모의 테스트의 검증 수준은 분석 문서에서 구분합니다.
 
 - 인증: 확장이 현재 Chrome의 RIDI 세션을 직접 사용하므로 쿠키를 복사하지 않습니다.
 - 자동 갱신: Chrome 확장은 브라우저의 `ridi-rt`를 직접 저장하지 않고 공식 토큰 갱신 요청에만 자동으로 사용합니다.
@@ -60,6 +65,7 @@ Vercel에서 개인 서재를 직접 분석하는 방식은 Cloudflare가 서버
 - `book-api.ridibooks.com/books?b_ids=` — 책·시리즈 메타 (공개, 배치)
 - `ridibooks.com/api/user/reading-histories/series/{id}/latest` — 읽기 진행
 - `search-api.ridibooks.com/search?where=book` — 작가 작품 검색 (공개)
+- `api.ridibooks.com/graphql`의 `userInterestBook` — 관심 작품과 새 이야기 수 조회 (인증)
 
 자세한 리버싱 노트는 `lib/ridi/` 코드 주석 참고.
 
@@ -85,6 +91,8 @@ ALADIN_TTB_KEY=your-ttb-key
 Vercel 서버가 Cloudflare 챌린지를 대신 해결하거나 `cf_clearance`를 자동 발급하는 기능은 제공하지 않습니다.
 
 현재 인증 분석과 보안 경계는 [RIDI 인증 및 라이브러리 API 분석](docs/ridi-auth-api-2026-10-24.md)에 기록했습니다.
+
+Steam 확장 선례, RIDI DOM 대응 방식과 검증 범위는 [RIDI 페이지 인핸서 분석](docs/ridi-page-enhancer-2026-10-24.md)에 기록했습니다.
 
 재실행 시 결과는 `data/`에 캐시됩니다.
 
