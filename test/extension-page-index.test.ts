@@ -3,11 +3,21 @@ import {
   buildPageIndex,
   classifyPageBook,
   createPageLookup,
+  detectPageKind,
   normalizeBookTitle,
   selectBadgeStatuses,
 } from "../extension/src/page-index.js";
 
 describe("RIDI page enhancement index", () => {
+  it("detects both legacy and canonical library URLs", () => {
+    expect(detectPageKind("library.ridibooks.com", "/serial-preferences")).toBe("interest");
+    expect(detectPageKind("ridibooks.com", "/library/serial-preferences")).toBe("interest");
+    expect(detectPageKind("ridibooks.com", "/library/books")).toBe("purchases");
+    expect(detectPageKind("ridibooks.com", "/library/shelves")).toBe("shelves");
+    expect(detectPageKind("ridibooks.com", "/comics/new-releases")).toBe("releases");
+    expect(detectPageKind("ridibooks.com", "/books/123")).toBeNull();
+  });
+
   it("normalizes volume labels without losing the series title", () => {
     expect(normalizeBookTitle("[코믹] 대전 감사합니다 10권 (완결)")).toBe("대전감사합니다");
     expect(normalizeBookTitle("대전 감사합니다")).toBe("대전감사합니다");

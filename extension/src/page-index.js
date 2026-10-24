@@ -8,6 +8,22 @@ const BADGE_PRIORITIES = {
   releases: ["interestUpdate", "owned", "ownedSeries", "newVolume", "interest", "authorNew", "unread", "finished"],
 };
 
+export function detectPageKind(hostname, pathname) {
+  const isLibraryHost = hostname === "library.ridibooks.com";
+  const isCanonicalLibraryPath = hostname === "ridibooks.com" && /^\/library(?:\/|$)/u.test(pathname);
+  const path = isCanonicalLibraryPath
+    ? pathname.replace(/^\/library(?=\/|$)/u, "") || "/"
+    : pathname;
+
+  if (isLibraryHost || isCanonicalLibraryPath) {
+    if (path.startsWith("/serial-preferences")) return "interest";
+    if (path === "/shelves" || path.startsWith("/shelf/")) return "shelves";
+    if (path === "/" || path.startsWith("/books")) return "purchases";
+  }
+  if (hostname === "ridibooks.com" && path === "/comics/new-releases") return "releases";
+  return null;
+}
+
 export function normalizeBookTitle(value) {
   return String(value ?? "")
     .normalize("NFKC")

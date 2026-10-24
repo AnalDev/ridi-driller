@@ -22,6 +22,7 @@ describe("RIDI extension manifest", () => {
     const enhancer = manifest.content_scripts.find((entry) => entry.js.includes("src/page-enhancer.js"));
     expect(enhancer?.matches).toEqual([
       "https://library.ridibooks.com/*",
+      "https://ridibooks.com/library*",
       "https://ridibooks.com/comics/new-releases*",
     ]);
     expect(manifest.web_accessible_resources[0]?.resources).toContain("src/page-index.js");

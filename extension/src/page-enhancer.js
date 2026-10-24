@@ -1,5 +1,5 @@
 (async () => {
-  const { classifyPageBook, createPageLookup, selectBadgeStatuses } = await import(
+  const { classifyPageBook, createPageLookup, detectPageKind, selectBadgeStatuses } = await import(
     chrome.runtime.getURL("src/page-index.js")
   );
 
@@ -47,16 +47,7 @@
   const send = (cmd, extra = {}) => chrome.runtime.sendMessage({ cmd, ...extra }).catch(() => null);
 
   function pageKind() {
-    const path = location.pathname.replace(/^\/library(?=\/|$)/, "") || "/";
-    if (location.hostname === "library.ridibooks.com") {
-      if (path.startsWith("/serial-preferences")) return "interest";
-      if (path === "/shelves" || path.startsWith("/shelf/")) return "shelves";
-      if (path === "/" || path.startsWith("/books")) return "purchases";
-    }
-    if (location.hostname === "ridibooks.com" && path === "/comics/new-releases") {
-      return "releases";
-    }
-    return null;
+    return detectPageKind(location.hostname, location.pathname);
   }
 
   function cleanTitle(value) {

@@ -46,6 +46,7 @@
     {
       "matches": [
         "https://library.ridibooks.com/*",
+        "https://ridibooks.com/library*",
         "https://ridibooks.com/comics/new-releases*"
       ],
       "js": ["src/page-enhancer.js"],
