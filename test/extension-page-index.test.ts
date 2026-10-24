@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  PAGE_INDEX_VERSION,
   buildPageIndex,
   classifyPageBook,
   createPageLookup,
@@ -9,6 +10,10 @@ import {
 } from "../extension/src/page-index.js";
 
 describe("RIDI page enhancement index", () => {
+  it("uses the complete-catalog index schema", () => {
+    expect(PAGE_INDEX_VERSION).toBe(2);
+  });
+
   it("detects both legacy and canonical library URLs", () => {
     expect(detectPageKind("library.ridibooks.com", "/serial-preferences")).toBe("interest");
     expect(detectPageKind("ridibooks.com", "/library/serial-preferences")).toBe("interest");

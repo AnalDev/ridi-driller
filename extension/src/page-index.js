@@ -1,4 +1,4 @@
-export const PAGE_INDEX_VERSION = 1;
+export const PAGE_INDEX_VERSION = 2;
 
 const STATUS_KEYS = ["newVolume", "unread", "finished", "authorNew"];
 const BADGE_PRIORITIES = {

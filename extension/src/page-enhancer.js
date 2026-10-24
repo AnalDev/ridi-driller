@@ -512,6 +512,12 @@
       el("p", "sync-status", progressMessage || (view.generatedAt ? `${formatDate(view.generatedAt, true)} 로컬 색인` : "전체 데이터를 불러오는 중")),
     );
     const actions = el("div", "head-actions");
+    if (!pageIndex || (kind === "purchases" && !Array.isArray(pageIndex.catalog))) {
+      const analyze = el("button", "", "서재 분석");
+      analyze.type = "button";
+      analyze.addEventListener("click", () => void send("analyze", { opts: { withAuthors: true } }));
+      actions.append(analyze);
+    }
     const sync = el("button", "", "전체 새로고침");
     sync.type = "button";
     sync.addEventListener("click", () => void refreshCatalog(kind, true));
@@ -523,12 +529,8 @@
     head.append(heading, actions);
     section.append(head);
 
-    if (!pageIndex) {
+    if (kind === "purchases" && !Array.isArray(pageIndex?.catalog)) {
       const empty = el("div", "empty", progressMessage || "전체 상태 표시를 위해 서재 분석이 필요합니다.");
-      const analyze = el("button", "", "서재 분석");
-      analyze.type = "button";
-      analyze.addEventListener("click", () => void send("analyze", { opts: { withAuthors: true } }));
-      empty.append(document.createElement("br"), analyze);
       section.append(empty);
       shadow.append(style, section);
       return;
@@ -800,14 +802,16 @@
       scheduleRender();
       const catalog = await send("syncReleaseCatalog", { force });
       if (catalog?.items) releaseCatalog = catalog;
+      else if (!releaseCatalog?.items) progressMessage = "전체 신간을 불러오지 못했습니다. 잠시 뒤 다시 시도하세요.";
     } else if (kind === "shelves") {
       const uuid = location.pathname.match(/\/shelf\/([0-9a-f-]+)/iu)?.[1] ?? null;
       progressMessage = "책장 전체를 불러오는 중";
       scheduleRender();
       const catalog = await send("syncShelfCatalog", { uuid, force });
       if (catalog) shelfCatalog = catalog;
+      else if (!shelfCatalog) progressMessage = "책장 전체를 불러오지 못했습니다. 잠시 뒤 다시 시도하세요.";
     }
-    progressMessage = "";
+    if ((kind === "releases" && releaseCatalog?.items) || (kind === "shelves" && shelfCatalog)) progressMessage = "";
     scheduleRender();
   }
 
