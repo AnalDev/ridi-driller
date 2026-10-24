@@ -9,6 +9,7 @@ const LIB_API = "https://library-api.ridibooks.com";
 const BOOK_API = "https://book-api.ridibooks.com";
 const SEARCH_API = "https://search-api.ridibooks.com";
 const GRAPHQL_API = "https://api.ridibooks.com/graphql";
+const NEW_RELEASE_API = "https://api.ridibooks.com/v2/new-releases";
 const STORE = "https://ridibooks.com";
 const TOKEN_REFRESH_URL = "https://account.ridibooks.com/ridi/token";
 
@@ -204,6 +205,55 @@ export async function fetchAllUnits(onProgress) {
   return units;
 }
 
+// ---- shelves: 사용자 책장과 책장별 전체 작품 (인증 필요) ----
+
+export async function fetchAllShelves(onProgress) {
+  const countResult = await authGet(`${LIB_API}/shelves/count/`);
+  const total = Number(countResult.count ?? 0);
+  const shelves = [];
+  for (let offset = 0; offset < total; offset += PAGE) {
+    const url = `${LIB_API}/shelves/?offset=${offset}&limit=${PAGE}&need_three_items=true&orderBy=RECENTLY_UPDATED&orderDirection=desc`;
+    const result = await authGet(url);
+    const items = result.items ?? [];
+    shelves.push(...items.map((item) => ({
+      id: String(item.id ?? ""),
+      uuid: String(item.shelf_uuid ?? ""),
+      name: String(item.name ?? ""),
+      thumbnailBookIds: (item.thumbnail_b_ids ?? []).map(String),
+      bookCount: Number(item.count ?? 0),
+    })));
+    onProgress?.(Math.min(shelves.length, total), total);
+    if (items.length === 0) break;
+  }
+  return shelves;
+}
+
+export async function fetchAllShelfUnits(uuid, onProgress) {
+  const encoded = encodeURIComponent(uuid);
+  const countResult = await authGet(`${LIB_API}/shelves/${encoded}/count/`);
+  const total = Number(countResult.count ?? 0);
+  const units = [];
+  let shelf = null;
+  for (let offset = 0; offset < total; offset += PAGE) {
+    const url = `${LIB_API}/shelves/${encoded}/?offset=${offset}&limit=${PAGE}&orderBy=RECENTLY_PURCHASED&orderDirection=desc`;
+    const result = await authGet(url);
+    shelf = result.shelf ?? shelf;
+    const items = result.items ?? [];
+    units.push(...items.map((item) => ({
+      unitId: String(item.unit_id ?? ""),
+      bookIds: (item.b_ids ?? []).map(String),
+    })));
+    onProgress?.(Math.min(units.length, total), total);
+    if (items.length === 0) break;
+  }
+  return {
+    uuid,
+    name: String(shelf?.name ?? ""),
+    units,
+    total,
+  };
+}
+
 // ---- book-api: 공개 배치 메타 ----
 
 function chunk(arr, size) {
@@ -337,6 +387,95 @@ export async function fetchInterestBooks(onProgress) {
     if (items.length === 0) break;
   }
   return books;
+}
+
+// ---- api.ridibooks.com/v2/new-releases: 장르별 전체 신간 (공개) ----
+
+export const NEW_RELEASE_GENRES = [
+  { id: 1500, label: "만화" },
+  { id: 1600, label: "웹툰" },
+  { id: 6100, label: "만화연재" },
+  { id: 3000, label: "라이트노벨" },
+  { id: 1700, label: "로맨스" },
+  { id: 1710, label: "판타지" },
+  { id: 4200, label: "BL" },
+  { id: 100, label: "소설" },
+  { id: 200, label: "경영/경제" },
+  { id: 300, label: "자기계발" },
+  { id: 2200, label: "컴퓨터/IT" },
+];
+
+function releaseRecord(item, genre) {
+  const book = item?.book;
+  if (!book?.book_id || book.trial) return null;
+  const primary = (book.authors ?? []).filter((author) =>
+    ["author", "original_author", "comic_author", "story_writer"].includes(author.role),
+  );
+  const authors = [...new Set((primary.length ? primary : book.authors ?? []).map((author) => author.name).filter(Boolean))];
+  return {
+    bId: String(book.book_id),
+    title: String(book.serial?.title || book.title || ""),
+    volumeTitle: String(book.title || ""),
+    authors,
+    publisher: String(book.publisher?.name ?? ""),
+    publishDate: book.publication_date || book.registration_date || null,
+    cover: book.cover?.large || coverUrl(book.book_id, "large"),
+    storeUrl: storeUrl(book.book_id),
+    contentType: genre.label,
+    genreIds: [genre.id],
+    genreLabels: [genre.label],
+    isAdult: Boolean(book.adults_only),
+    rating: Number(book.ratings?.buyer_rating?.score ?? book.ratings?.rating ?? 0) || null,
+  };
+}
+
+async function fetchNewReleaseGenre(genre) {
+  const records = [];
+  const limit = 200;
+  let offset = 0;
+  for (;;) {
+    const url = `${NEW_RELEASE_API}?category_includes=${genre.id}&offset=${offset}&limit=${limit}`;
+    const result = await publicGet(url);
+    const items = result?.data?.items ?? [];
+    for (const item of items) {
+      const record = releaseRecord(item, genre);
+      if (record) records.push(record);
+    }
+    if (!result?.data?.pagination?.next_page || items.length === 0) break;
+    offset += items.length;
+  }
+  return records;
+}
+
+export async function fetchAllNewReleases(onProgress) {
+  const merged = new Map();
+  let completed = 0;
+  await mapLimit(NEW_RELEASE_GENRES, 3, async (genre) => {
+    const records = await fetchNewReleaseGenre(genre);
+    for (const record of records) {
+      const previous = merged.get(record.bId);
+      merged.set(record.bId, previous
+        ? {
+            ...previous,
+            genreIds: [...new Set([...previous.genreIds, ...record.genreIds])],
+            genreLabels: [...new Set([...previous.genreLabels, ...record.genreLabels])],
+          }
+        : record);
+    }
+    completed += 1;
+    onProgress?.(completed, NEW_RELEASE_GENRES.length, merged.size);
+  });
+  const genreOrder = new Map(NEW_RELEASE_GENRES.map((genre, index) => [genre.id, index]));
+  const genreLabels = new Map(NEW_RELEASE_GENRES.map((genre) => [genre.id, genre.label]));
+  return [...merged.values()]
+    .map((record) => {
+      const genreIds = [...record.genreIds].sort((a, b) => genreOrder.get(a) - genreOrder.get(b));
+      return { ...record, genreIds, genreLabels: genreIds.map((id) => genreLabels.get(id)) };
+    })
+    .sort((a, b) =>
+      (Date.parse(b.publishDate || "") || 0) - (Date.parse(a.publishDate || "") || 0)
+        || String(a.title).localeCompare(String(b.title), "ko"),
+    );
 }
 
 export const coverUrl = (bId, size) => `https://img.ridicdn.net/cover/${bId}/${size}`;

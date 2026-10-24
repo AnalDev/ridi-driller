@@ -115,4 +115,61 @@ describe("RIDI extension authentication", () => {
     expect(secondRequest.variables.pagination).toEqual({ limit: 100, offset: 100 });
     expect(progress).toHaveBeenLastCalledWith(101, 101);
   });
+
+  it("paginates every new-release genre and merges duplicate book ids", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      const genre = Number(url.searchParams.get("category_includes"));
+      const offset = Number(url.searchParams.get("offset"));
+      if (genre === 1500 && offset === 0) {
+        return Response.json({ data: {
+          items: [
+            { book: { book_id: "same", title: "공통 1권", serial: { title: "공통" }, authors: [] } },
+            { book: { book_id: "trial", title: "체험판", trial: true, authors: [] } },
+          ],
+          pagination: { next_page: "/v2/new-releases?offset=2" },
+        } });
+      }
+      if (genre === 1500 && offset === 2) {
+        return Response.json({ data: {
+          items: [{ book: { book_id: "comic", title: "만화", authors: [] } }],
+          pagination: { next_page: null },
+        } });
+      }
+      if (genre === 1600) {
+        return Response.json({ data: {
+          items: [{ book: { book_id: "same", title: "공통", authors: [] } }],
+          pagination: { next_page: null },
+        } });
+      }
+      return Response.json({ data: { items: [], pagination: { next_page: null } } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { fetchAllNewReleases } = await loadApi();
+
+    const records = await fetchAllNewReleases();
+
+    expect(records).toHaveLength(2);
+    expect(records.find((record) => record.bId === "same")).toMatchObject({
+      genreIds: [1500, 1600],
+      genreLabels: ["만화", "웹툰"],
+    });
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("offset=2"))).toBe(true);
+  });
+
+  it("paginates a complete shelf by its count endpoint", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ count: 301 }))
+      .mockResolvedValueOnce(Response.json({ shelf: { name: "읽을 책" }, items: Array.from({ length: 300 }, (_, index) => ({ unit_id: index + 1, b_ids: [index + 10] })) }))
+      .mockResolvedValueOnce(Response.json({ shelf: { name: "읽을 책" }, items: [{ unit_id: 301, b_ids: [999] }] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { fetchAllShelfUnits } = await loadApi();
+
+    const result = await fetchAllShelfUnits("shelf-uuid");
+
+    expect(result).toMatchObject({ name: "읽을 책", total: 301 });
+    expect(result.units).toHaveLength(301);
+    expect(fetchMock.mock.calls[2]?.[0]).toContain("offset=300&limit=300");
+  });
 });
