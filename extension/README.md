@@ -1,63 +1,68 @@
-# 리디 드릴러 — 크롬 확장 (서재 인핸서)
+# 리디 드릴러 Chrome 확장
 
-내 리디 서재를 **브라우저 세션 그대로** 분석해 미보유 신권·안 읽은 책·작가 신작을 찾아주고,
-리디북스 서재 페이지 안에 결과 패널을 띄웁니다. 쿠키를 복사·붙여넣을 필요가 없습니다.
+RIDI에 로그인된 Chrome 세션으로 내 서재를 직접 분석합니다.
 
-## 왜 확장인가
+쿠키를 복사하거나 Vercel 서버로 전송하지 않습니다.
 
-기존 리디 드릴러 웹앱의 두 가지 마찰을 없앱니다.
+## 설치
 
-- **쿠키 붙여넣기 제거** — 확장은 브라우저 세션의 `ridi-at`과 `ridi-rt`를 값으로 저장하지 않고 RIDI 요청에 자동으로 사용합니다.
-- **Cloudflare 로그인 우회 불필요** — 이미 브라우저에서 로그인돼 있으니, 배경 워커가
-  `*.ridibooks.com` 으로 요청하면 세션 쿠키가 자동으로 실립니다(`credentials:"include"` +
-  `host_permissions`). 서버가 아니라 브라우저 안에서 돌기 때문에 가능한 방식입니다.
-- **세션 자동 갱신** — 라이브러리 API가 401을 반환하면 공식 `POST account.ridibooks.com/ridi/token` 호출 뒤 원요청을 한 번 재시도하며, Cloudflare 403은 갱신하지 않습니다.
+1. `ridi-driller-extension.zip`의 압축을 풉니다.
+2. Chrome 주소창에 `chrome://extensions`를 입력합니다.
+3. 오른쪽 위의 개발자 모드를 켭니다.
+4. `압축해제된 확장 프로그램을 로드합니다`를 누릅니다.
+5. 압축을 푼 폴더에서 `manifest.json`이 있는 폴더를 선택합니다.
 
-## 구조
+업데이트된 ZIP으로 교체한 경우 기존 확장의 새로고침 버튼을 누릅니다.
 
-```
-manifest.json          MV3. permissions: cookies·storage / host: *.ridibooks.com, localhost:3210
-src/api.js             리디 내부 API 클라이언트 (library·book·reading·search) — 세션 자동 사용
-src/recommend.js       추천 로직 (lib/ridi/recommend.ts 이관): 미보유 신권·안 읽은 책·작가 신작
-src/background.js       서비스 워커 — 서재 분석 오케스트레이션 + 진행률 방송 + 결과 캐시
-src/content.js/css      리디 서재 페이지에 패널 주입 ("사이트 개조" 부분)
-src/popup.html/js       세션 상태·분석 버튼·요약·BookDriller 전송
-icons/                  16/48/128 아이콘
-```
+## 사용
 
-호출하는 리디 엔드포인트 (모두 기존 리버싱에서 검증됨):
-- `account.ridibooks.com/ridi/token` — 만료된 액세스 세션 갱신 (인증)
-- `library-api.ridibooks.com/items/main/` — 소장 유닛 (인증)
-- `book-api.ridibooks.com/books?b_ids=` — 공개 배치 메타
-- `ridibooks.com/api/user/reading-histories/series/{id}/latest` — 읽기 진행 (인증)
-- `search-api.ridibooks.com/search` — 작가 작품 (공개)
+1. [RIDI](https://ridibooks.com/account/login)에 로그인합니다.
+2. Chrome 도구 모음에서 리디 드릴러 아이콘을 누릅니다.
+3. 로그인 상태가 확인되면 `서재 분석`을 누릅니다.
+4. 분석이 끝나면 `리디 서재에서 결과 보기`를 누릅니다.
+5. [RIDI 서재](https://library.ridibooks.com/) 오른쪽 패널에서 미보유 신권, 안 읽은 책, 다 읽은 책, 작가 신작을 확인합니다.
 
-## 설치 (개발자 모드, unpacked)
+분석은 서재 규모에 따라 수 분이 걸릴 수 있습니다.
 
-1. Chrome 주소창에 `chrome://extensions` 입력
-2. 우상단 **개발자 모드** 켜기
-3. **압축해제된 확장 프로그램을 로드합니다** 클릭 → 이 `extension/` 폴더 선택
-4. 리디북스에 로그인된 상태에서 확장 아이콘 클릭 → **서재 분석**
-5. 분석 후 `ridibooks.com/account/library` 로 가면 오른쪽에 결과 패널이 뜹니다
+## 인증 동작
 
-## BookDriller 연동 (선택)
+- `ridi-at`이 유효하면 현재 브라우저 쿠키로 라이브러리 API를 호출합니다.
+- 라이브러리 API가 401을 반환하면 공식 `POST account.ridibooks.com/ridi/token`을 호출하고 원요청을 한 번 재시도합니다.
+- 갱신에는 브라우저의 `ridi-rt`가 자동 사용되지만 확장 저장소나 화면에는 토큰 값을 기록하지 않습니다.
+- 403은 인증 만료와 구분하고 Cloudflare 오류로 표시합니다.
 
-팝업의 **BookDriller(:3210)로 보내기** 를 누르면 분석 결과가 통합 서버
-(`packages/web`, `POST /api/ext/ridi-analysis`)로 전송돼 타 서점·도서관과 함께 볼 수 있습니다.
-서버를 먼저 띄워야 합니다: `node packages/web/dist/server.js` (기본 포트 충돌 시 `PORT=3210`).
+## 오류 해결
 
-## 한계 (리디 데이터 제약 — 계승)
+### 리디 로그인 안 됨
 
-리디는 시리즈별 **가장 최근 연 권 하나**만 알려줍니다("최고 도달 권" API 없음).
-그래서 "N권까지 읽음"이 아니라 **"최근 읽은 권 N"** 으로 표시하며, 앞 권을 재열람하면
-어긋날 수 있습니다. 추정하지 않고 리디가 준 값 그대로 보여줍니다.
+RIDI 로그인 페이지에서 로그인한 뒤 확장 팝업을 다시 엽니다.
 
-## 보안·범위
+### Cloudflare 403
 
-- **내 브라우저의 내 세션만** 다룹니다. 토큰을 어디에도 저장/전송하지 않습니다
-  (BookDriller 전송 시에도 분석 결과만 보내고 쿠키는 보내지 않음).
-- content script가 바꾸는 건 **내 화면뿐** — 다른 사용자에게 영향 없음.
-- 개인 용도로만. 남의 세션을 수집하는 용도로 배포하지 마세요. 리디 ToS를 존중해
-  저빈도로 사용하세요(내부적으로 동시성·지연 제한 적용).
+[RIDI 서재](https://library.ridibooks.com/)를 직접 열어 정상 표시되는지 확인한 뒤 확장에서 다시 분석합니다.
 
-분석 시각, 번들 해시, 확인 범위는 [인증/API 분석 문서](../docs/ridi-auth-api-2026-10-24.md)를 참고하세요.
+브라우저 자체에서도 챌린지가 보이면 해당 확인을 먼저 완료해야 합니다.
+
+### 결과 패널이 안 보임
+
+확장 관리 화면에서 버전이 `0.2.0`인지 확인하고 확장을 새로고침한 뒤 RIDI 서재 탭도 새로고침합니다.
+
+## 데이터 범위
+
+리디는 시리즈별로 가장 최근에 연 권 하나만 제공하므로 표시되는 최근 읽은 권은 최고 도달 권과 다를 수 있습니다.
+
+확장은 추정하지 않고 RIDI 응답을 그대로 사용합니다.
+
+분석 결과는 `chrome.storage.local`에 저장하며 외부 서버로 전송하지 않습니다.
+
+## 확인된 API
+
+- `library-api.ridibooks.com/items/main/`
+- `book-api.ridibooks.com/books?b_ids=`
+- `ridibooks.com/api/user/reading-histories/series/{id}/latest`
+- `search-api.ridibooks.com/search`
+- `account.ridibooks.com/ridi/token`
+
+내부 API는 공개 계약이 아니므로 예고 없이 변경될 수 있습니다.
+
+분석 근거는 [인증/API 분석 문서](https://github.com/AnalDev/ridi-driller/blob/main/docs/ridi-auth-api-2026-10-24.md)에 기록돼 있습니다.

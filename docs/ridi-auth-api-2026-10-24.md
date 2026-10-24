@@ -10,8 +10,8 @@
 | 자동 갱신 | 공식 라이브러리 클라이언트는 API 401 뒤 `POST https://account.ridibooks.com/ridi/token`을 호출하고 원요청을 재시도한다. | 확장에서 단일 실행 갱신과 1회 재시도를 구현했다. |
 | 리프레시 쿠키 | 갱신 요청에는 브라우저 쿠키 저장소의 `ridi-rt`가 자동으로 포함된다. | 확장은 값을 애플리케이션 저장소나 응답에 노출하지 않고 `credentials: include`만 사용한다. |
 | 라이브러리 API | `/items/main/count/`와 `/items/...` 계열은 현 배포 번들에도 남아 있다. | 기존 라이브러리 경로를 유지한다. |
-| Cloudflare | 403은 토큰 만료와 다른 실패이며 `cf_clearance`와 발급 당시 User-Agent 조합의 영향을 받는다. | 401과 403을 분리하고 웹 입력에서 cURL의 두 값을 함께 추출한다. |
-| 웹 배포 | Vercel이 장기 리프레시 토큰을 보관하면 침해 범위와 세션 쿠키 크기가 커진다. | 웹 세션은 `ridi-rt`를 의도적으로 폐기하고 24시간 액세스 세션만 사용한다. |
+| Cloudflare | 403은 토큰 만료와 다른 실패이며 쿠키, 브라우저 지문, 접속 IP의 영향을 받을 수 있다. | 개인 서재 분석을 사용자 브라우저의 확장으로 이동한다. |
+| 웹 배포 | Vercel 출구 IP는 사용자 브라우저와 달라 사용자 `cf_clearance` 재사용이 실패할 수 있다. | Vercel은 공개 도서 검색과 확장 배포에 사용하고 수동 서재 연결은 고급 기능으로만 유지한다. |
 
 ## 확인 근거
 
@@ -50,11 +50,11 @@ sequenceDiagram
 
 브라우저 확장은 RIDI 도메인으로 직접 요청하므로 현재 로그인 세션과 Cloudflare 상태를 그대로 사용할 수 있다.
 
-웹앱은 원시 JWT, Cookie 헤더, Cookie-Editor JSON, 브라우저의 Copy as cURL 입력을 지원한다.
+웹앱의 수동 연결은 원시 JWT, Cookie 헤더, Cookie-Editor JSON, 브라우저의 Copy as cURL 입력을 지원하지만 Cloudflare 통과를 보장하지 않는다.
 
 웹앱은 입력에서 `ridi-at`, `cf_clearance`, User-Agent만 선택하고 `ridi-rt`, `ridi-gs-at`, `ridi_auth`와 나머지 쿠키는 폐기한다.
 
-`cf_clearance`가 필요 없는 세션은 원시 `ridi-at`만 사용하는 편이 노출 범위가 더 작다.
+권장 경로는 쿠키 값을 RIDI 도메인 밖으로 전달하지 않는 Chrome 확장이다.
 
 공식 내부 API는 공개 계약이 아니므로 번들 경로, 응답 스키마, Cloudflare 정책은 예고 없이 다시 바뀔 수 있다.
 
