@@ -636,7 +636,7 @@
     }
 
     const resultHead = el("div", "result-head");
-    resultHead.append(el("strong", "result-count", "결과 계산 중"), el("span", "", "원본 RIDI 페이지 번호와 무관한 전체 로컬 결과"));
+    resultHead.append(el("strong", "result-count", "결과 계산 중"));
     const results = el("div", "results");
     const paginationHost = el("div", "pagination-host");
     section.append(resultHead, results, paginationHost);

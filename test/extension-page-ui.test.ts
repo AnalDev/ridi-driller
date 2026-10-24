@@ -20,6 +20,6 @@ describe("RIDI inline page tools", () => {
   it("renders cached complete data with extension-owned pagination", () => {
     expect(source).toContain("buildIntegratedView");
     expect(source).toContain("paginateIntegratedRows");
-    expect(source).toContain("원본 RIDI 페이지 번호와 무관한 전체 로컬 결과");
+    expect(source).toContain("ridi_release_catalog");
   });
 });
