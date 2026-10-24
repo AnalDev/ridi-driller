@@ -21,6 +21,10 @@ describe("RIDI inline page tools", () => {
     expect(source).toContain('progressMessage = "전체 서재를 분석하는 중"');
   });
 
+  it("does not update result nodes while the empty state is mounted", () => {
+    expect(source).toContain("if (!count || !results || !paginationHost) return");
+  });
+
   it("offers a combined unpurchased-or-unread filter", () => {
     expect(source).toContain('["attention", "미구매 또는 미독"]');
     expect(viewSource).toContain('matchesStatus(record, "unowned") || statuses.has("unread")');

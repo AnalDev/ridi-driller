@@ -391,13 +391,15 @@
     if (pagination.page !== prefs.page) updatePrefs(kind, { page: pagination.page });
 
     const count = shadow.querySelector(".result-count");
+    const results = shadow.querySelector(".results");
+    const paginationHost = shadow.querySelector(".pagination-host");
+    if (!count || !results || !paginationHost) return;
     count.textContent = `전체 ${view.rows.length.toLocaleString("ko-KR")}개 · 조건 ${filtered.length.toLocaleString("ko-KR")}개 · ${pagination.from.toLocaleString("ko-KR")} - ${pagination.to.toLocaleString("ko-KR")} 표시`;
     for (const button of shadow.querySelectorAll("[data-filter]")) {
       const key = button.dataset.filter;
       button.setAttribute("aria-pressed", String(prefs.filters.includes(key)));
     }
 
-    const results = shadow.querySelector(".results");
     results.replaceChildren();
     if (pagination.rows.length === 0) {
       results.append(el("div", "empty", progressMessage || "조건에 맞는 결과가 없습니다."));
@@ -409,7 +411,6 @@
       results.append(fragment);
     }
 
-    const paginationHost = shadow.querySelector(".pagination-host");
     paginationHost.replaceChildren(pageButtons(pagination, (page) => {
       updatePrefs(kind, { page });
       updateIntegratedResults(host, kind);
