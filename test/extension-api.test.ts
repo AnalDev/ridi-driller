@@ -172,4 +172,27 @@ describe("RIDI extension authentication", () => {
     expect(result.units).toHaveLength(301);
     expect(fetchMock.mock.calls[2]?.[0]).toContain("offset=300&limit=300");
   });
+
+  it("paginates the complete shelf list", async () => {
+    const first = Array.from({ length: 300 }, (_, index) => ({
+      id: index + 1,
+      shelf_uuid: `uuid-${index + 1}`,
+      name: `책장 ${index + 1}`,
+      thumbnail_b_ids: [index + 10],
+      count: index,
+    }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ count: 301 }))
+      .mockResolvedValueOnce(Response.json({ items: first }))
+      .mockResolvedValueOnce(Response.json({ items: [{ id: 301, shelf_uuid: "uuid-301", name: "마지막", thumbnail_b_ids: [], count: 1 }] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { fetchAllShelves } = await loadApi();
+
+    const shelves = await fetchAllShelves();
+
+    expect(shelves).toHaveLength(301);
+    expect(shelves.at(-1)).toMatchObject({ uuid: "uuid-301", name: "마지막", bookCount: 1 });
+    expect(fetchMock.mock.calls[2]?.[0]).toContain("offset=300&limit=300");
+  });
 });
