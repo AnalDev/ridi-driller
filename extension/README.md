@@ -7,10 +7,11 @@
 
 기존 리디 드릴러 웹앱의 두 가지 마찰을 없앱니다.
 
-- **쿠키 붙여넣기 제거** — 확장은 `chrome.cookies` 로 `ridi-at`(httpOnly)까지 자동으로 읽습니다.
+- **쿠키 붙여넣기 제거** — 확장은 브라우저 세션의 `ridi-at`과 `ridi-rt`를 값으로 저장하지 않고 RIDI 요청에 자동으로 사용합니다.
 - **Cloudflare 로그인 우회 불필요** — 이미 브라우저에서 로그인돼 있으니, 배경 워커가
   `*.ridibooks.com` 으로 요청하면 세션 쿠키가 자동으로 실립니다(`credentials:"include"` +
   `host_permissions`). 서버가 아니라 브라우저 안에서 돌기 때문에 가능한 방식입니다.
+- **세션 자동 갱신** — 라이브러리 API가 401을 반환하면 공식 `POST account.ridibooks.com/ridi/token` 호출 뒤 원요청을 한 번 재시도하며, Cloudflare 403은 갱신하지 않습니다.
 
 ## 구조
 
@@ -25,6 +26,7 @@ icons/                  16/48/128 아이콘
 ```
 
 호출하는 리디 엔드포인트 (모두 기존 리버싱에서 검증됨):
+- `account.ridibooks.com/ridi/token` — 만료된 액세스 세션 갱신 (인증)
 - `library-api.ridibooks.com/items/main/` — 소장 유닛 (인증)
 - `book-api.ridibooks.com/books?b_ids=` — 공개 배치 메타
 - `ridibooks.com/api/user/reading-histories/series/{id}/latest` — 읽기 진행 (인증)
@@ -57,3 +59,5 @@ icons/                  16/48/128 아이콘
 - content script가 바꾸는 건 **내 화면뿐** — 다른 사용자에게 영향 없음.
 - 개인 용도로만. 남의 세션을 수집하는 용도로 배포하지 마세요. 리디 ToS를 존중해
   저빈도로 사용하세요(내부적으로 동시성·지연 제한 적용).
+
+분석 시각, 번들 해시, 확인 범위는 [인증/API 분석 문서](../docs/ridi-auth-api-2026-10-24.md)를 참고하세요.

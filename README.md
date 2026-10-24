@@ -34,7 +34,8 @@
 
 리디는 공개 API가 없어 웹 클라이언트가 쓰는 내부 엔드포인트를 이용합니다 (모두 실제 검증됨).
 
-- 인증: 브라우저의 `ridi-at` 쿠키 (access token). 스크립트 로그인은 Cloudflare가 막으므로 쿠키를 직접 붙여넣습니다.
+- 인증: 브라우저의 `ridi-at` 액세스 쿠키를 사용하며, Cloudflare 403이 발생하면 같은 브라우저의 `cf_clearance`와 User-Agent도 필요합니다.
+- 자동 갱신: Chrome 확장은 브라우저의 `ridi-rt`를 직접 저장하지 않고 공식 토큰 갱신 요청에만 자동으로 사용합니다.
 - `library-api.ridibooks.com/items/main/` — 서재 목록 (유닛/시리즈 단위)
 - `book-api.ridibooks.com/books?b_ids=` — 책·시리즈 메타 (공개, 배치)
 - `ridibooks.com/api/user/reading-histories/series/{id}/latest` — 읽기 진행
@@ -60,9 +61,11 @@ ALADIN_TTB_KEY=your-ttb-key
 무료 eBook 검색은 검색어를 생략하면 무료책을 둘러보는 방식으로 동작합니다. 리디는 전 카테고리 무료 목록을, 알라딘과 교보문고는 각 검색 서비스가 제공하는 무료 도서 탐색 결과를 사용합니다. 전자책이면서 현재 판매가가 명시적으로 0원인 결과만 포함하고, 제목이나 원본 데이터에 체험판·맛보기·미리보기·샘플·무료 특별판·예고편 표시가 있으면 제외합니다. 서점별 API 범위와 응답 변화로 전체 무료 도서 중 일부가 누락될 수 있습니다.
 
 1. 브라우저에서 ridibooks.com 로그인 → F12 → Application → Cookies → `https://ridibooks.com`
-2. `ridi-at` 값 복사 (Cloudflare에 막히면 `cf_clearance`도 함께)
-3. 앱 첫 화면에 붙여넣고 **서재 연결하기**
+2. `ridi-at` 값을 복사하고, Cloudflare 403이면 RIDI 문서 요청을 **Copy as cURL**로 복사
+3. 토큰 원문, 쿠키 JSON, Cookie 헤더 또는 cURL을 앱 첫 화면에 붙여넣고 **서재 연결하기**
 4. **서재 분석 시작** — 단계적으로(서재→신권→미독→작가신작) 채워지며 진행률이 표시됩니다 (약 2~3분)
+
+현재 인증 분석과 보안 경계는 [RIDI 인증 및 라이브러리 API 분석](docs/ridi-auth-api-2026-10-24.md)에 기록했습니다.
 
 재실행 시 결과는 `data/`에 캐시됩니다.
 
