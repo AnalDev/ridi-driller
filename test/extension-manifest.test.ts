@@ -34,6 +34,6 @@ describe("RIDI extension manifest", () => {
   });
 
   it("ships the browser-session release", () => {
-    expect(manifest.version).toBe("0.3.0");
+    expect(manifest.version).toBe("0.3.1");
   });
 });
