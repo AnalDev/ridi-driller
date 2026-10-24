@@ -7,9 +7,13 @@ import {
   fetchAllUnits,
   fetchAuthorBooksMany,
   fetchBooksMeta,
+  fetchAllNewReleases,
+  fetchAllShelves,
+  fetchAllShelfUnits,
   fetchInterestBooks,
   fetchLastReadMany,
   getSession,
+  NEW_RELEASE_GENRES,
 } from "./api.js";
 import { buildRecommendations } from "./recommend.js";
 import { buildPageIndex } from "./page-index.js";
@@ -21,7 +25,12 @@ const CACHE_KEY = "ridi_analysis";
 const PAGE_INDEX_KEY = "ridi_page_index";
 const READING_NOTES_KEY = "ridi_reading_notes";
 const STORE_LIBRARY_KEY = "bookstore_libraries";
+const RELEASE_CATALOG_KEY = "ridi_release_catalog";
+const SHELF_CATALOG_KEY = "ridi_shelf_catalog";
+const CATALOG_TTL_MS = 30 * 60 * 1000;
 let running = false;
+let releaseSyncPromise = null;
+const shelfSyncPromises = new Map();
 
 /** 진행률을 팝업·컨텐츠로 방송 (수신자 없으면 조용히 무시). */
 function broadcast(msg) {
@@ -133,6 +142,69 @@ async function analyze({ withAuthors = true } = {}) {
   }
 }
 
+async function syncReleaseCatalog({ force = false } = {}) {
+  const stored = await chrome.storage.local.get(RELEASE_CATALOG_KEY);
+  const cached = stored[RELEASE_CATALOG_KEY] ?? null;
+  if (!force && cached && Date.now() - Number(cached.generatedAt ?? 0) < CATALOG_TTL_MS) return cached;
+  if (!releaseSyncPromise) {
+    releaseSyncPromise = (async () => {
+      const items = await fetchAllNewReleases((done, total, count) => {
+        broadcast({
+          type: "catalogProgress",
+          catalog: "releases",
+          message: `전체 신간 ${done}/${total}개 장르 · ${count.toLocaleString("ko-KR")}권`,
+          done,
+          total,
+        });
+      });
+      const catalog = {
+        version: 1,
+        generatedAt: Date.now(),
+        genres: NEW_RELEASE_GENRES,
+        items,
+      };
+      await chrome.storage.local.set({ [RELEASE_CATALOG_KEY]: catalog });
+      broadcast({ type: "catalogUpdated", catalog: "releases", count: items.length });
+      return catalog;
+    })().finally(() => {
+      releaseSyncPromise = null;
+    });
+  }
+  return releaseSyncPromise;
+}
+
+async function syncShelfCatalog({ uuid = null, force = false } = {}) {
+  const syncKey = uuid || "shelves";
+  const stored = await chrome.storage.local.get(SHELF_CATALOG_KEY);
+  const cached = stored[SHELF_CATALOG_KEY] ?? { version: 1, shelves: [], details: {} };
+  const current = uuid ? cached.details?.[uuid] : cached;
+  if (!force && current?.generatedAt && Date.now() - current.generatedAt < CATALOG_TTL_MS) return cached;
+  if (!shelfSyncPromises.has(syncKey)) {
+    const promise = (async () => {
+      const latestStored = await chrome.storage.local.get(SHELF_CATALOG_KEY);
+      const next = latestStored[SHELF_CATALOG_KEY] ?? { version: 1, shelves: [], details: {} };
+      if (uuid) {
+        const detail = await fetchAllShelfUnits(uuid, (done, total) => {
+          broadcast({ type: "catalogProgress", catalog: "shelves", message: `책장 ${done}/${total}`, done, total });
+        });
+        next.details = { ...(next.details ?? {}), [uuid]: { ...detail, generatedAt: Date.now() } };
+      } else {
+        next.shelves = await fetchAllShelves((done, total) => {
+          broadcast({ type: "catalogProgress", catalog: "shelves", message: `책장 ${done}/${total}`, done, total });
+        });
+        next.generatedAt = Date.now();
+      }
+      await chrome.storage.local.set({ [SHELF_CATALOG_KEY]: next });
+      broadcast({ type: "catalogUpdated", catalog: "shelves", uuid });
+      return next;
+    })().finally(() => {
+      shelfSyncPromises.delete(syncKey);
+    });
+    shelfSyncPromises.set(syncKey, promise);
+  }
+  return shelfSyncPromises.get(syncKey);
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     switch (msg?.cmd) {
@@ -147,6 +219,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         break;
       case "getPageIndex":
         sendResponse((await chrome.storage.local.get(PAGE_INDEX_KEY))[PAGE_INDEX_KEY] ?? null);
+        break;
+      case "getReleaseCatalog":
+        sendResponse((await chrome.storage.local.get(RELEASE_CATALOG_KEY))[RELEASE_CATALOG_KEY] ?? null);
+        break;
+      case "syncReleaseCatalog":
+        sendResponse(await syncReleaseCatalog({ force: Boolean(msg.force) }));
+        break;
+      case "getShelfCatalog":
+        sendResponse((await chrome.storage.local.get(SHELF_CATALOG_KEY))[SHELF_CATALOG_KEY] ?? null);
+        break;
+      case "syncShelfCatalog":
+        sendResponse(await syncShelfCatalog({ uuid: msg.uuid || null, force: Boolean(msg.force) }));
         break;
       case "openDashboard": {
         const hash = String(msg.hash ?? "all").replace(/[^a-zA-Z]/gu, "") || "all";
