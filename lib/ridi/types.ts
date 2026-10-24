@@ -3,6 +3,7 @@
 export interface RidiCreds {
   ridiAt: string;
   cfClearance?: string;
+  userAgent?: string;
 }
 
 // ---- library-api /items/main ----

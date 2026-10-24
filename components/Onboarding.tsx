@@ -1,58 +1,37 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
+import { parseRidiCredentials } from "@/lib/ridi/credentials";
+import type { RidiCreds } from "@/lib/ridi/types";
 import SourceCodeLink from "./SourceCodeLink";
 import StoreSearchLink from "./StoreSearchLink";
 
 const isTauri = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
+const subscribeToRuntime = () => () => {};
+
 async function tauriInvoke<T>(cmd: string): Promise<T> {
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<T>(cmd);
 }
 
-// Accept either the raw ridi-at value, or a cookie JSON export (Cookie-Editor /
-// EditThisCookie format: array of {name,value}), or a {"ridi-at": "..."} object.
-function extractRidiAt(input: string): string | null {
-  const t = input.trim();
-  if (!t) return null;
-  if (t.startsWith("[") || t.startsWith("{")) {
-    try {
-      const data = JSON.parse(t);
-      const list: { name?: string; value?: string }[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data.cookies)
-          ? data.cookies
-          : Object.entries(data).map(([name, value]) => ({ name, value: String(value) }));
-      const hit = list.find((c) => c.name === "ridi-at")?.value;
-      return hit?.trim() || null;
-    } catch {
-      return null;
-    }
-  }
-  // raw token (a ridi-at JWT has 3 dot-separated segments)
-  return t;
-}
-
 export default function Onboarding({ onDone }: { onDone: () => void }) {
-  const [ridiAt, setRidiAt] = useState("");
+  const [credentialInput, setCredentialInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [agree, setAgree] = useState(false);
-  const [desktop, setDesktop] = useState(false);
   const [tauriBusy, setTauriBusy] = useState<null | "opening" | "fetching">(null);
+  const desktop = useSyncExternalStore(subscribeToRuntime, isTauri, () => false);
 
-  useEffect(() => setDesktop(isTauri()), []);
-
-  async function loginWithToken(token: string) {
+  async function loginWithCredentials(credentials: RidiCreds) {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ridiAt: token }),
+        body: JSON.stringify(credentials),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "로그인 실패");
@@ -86,7 +65,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
         return;
       }
       await tauriInvoke("close_ridi_login").catch(() => {});
-      await loginWithToken(token);
+      await loginWithCredentials({ ridiAt: token });
     } catch {
       setError("쿠키를 가져오지 못했습니다.");
     } finally {
@@ -96,12 +75,12 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const token = extractRidiAt(ridiAt);
-    if (!token) {
-      setError("ridi-at 값을 찾지 못했습니다. 토큰 원문 또는 ridi-at이 포함된 쿠키 JSON을 붙여넣으세요.");
+    const credentials = parseRidiCredentials(credentialInput);
+    if (!credentials) {
+      setError("ridi-at 값을 찾지 못했습니다. 토큰 원문, 쿠키 JSON, Cookie 헤더 또는 cURL을 붙여넣으세요.");
       return;
     }
-    await loginWithToken(token);
+    await loginWithCredentials(credentials);
   }
 
   return (
@@ -298,19 +277,19 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
       <form onSubmit={submit} className="mt-6 space-y-4">
         <div>
           <label className="mb-1 block text-sm font-medium text-neutral-300">
-            ridi-at 쿠키 <span className="text-red-400">*</span>{" "}
-            <span className="text-neutral-500">(토큰 원문 또는 쿠키 JSON 붙여넣기)</span>
+            리디 인증 정보 <span className="text-red-400">*</span>{" "}
+            <span className="text-neutral-500">(토큰·쿠키 JSON·Cookie 헤더·cURL)</span>
           </label>
           <textarea
-            value={ridiAt}
-            onChange={(e) => setRidiAt(e.target.value)}
-            placeholder={'eyJhbGciOiJSUzI1NiIs...  또는  [{"name":"ridi-at","value":"..."}]'}
+            value={credentialInput}
+            onChange={(e) => setCredentialInput(e.target.value)}
+            placeholder={'eyJhbGciOiJSUzI1NiIs...  또는  curl ... -b \'ridi-at=...; cf_clearance=...\' -H \'user-agent: ...\''}
             rows={3}
             className="w-full rounded-lg border border-white/10 bg-neutral-900 p-3 font-mono text-xs text-neutral-100 outline-none focus:border-emerald-500/50"
             required
           />
           <p className="mt-1 text-xs text-neutral-500">
-            쿠키 확장프로그램의 <b>Export/JSON 내보내기</b> 결과를 통째로 붙여넣어도 ridi-at을 자동으로 찾아 씁니다.
+            필요한 값만 추출하며 장기 권한인 <code>ridi-rt</code>는 저장하지 않습니다.
           </p>
         </div>
         <label className="flex items-start gap-2 text-xs text-neutral-400">
@@ -330,7 +309,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
 
         <button
           type="submit"
-          disabled={loading || !ridiAt.trim() || !agree}
+          disabled={loading || !credentialInput.trim() || !agree}
           className="w-full rounded-lg bg-emerald-500 py-2.5 text-sm font-semibold text-neutral-950 transition hover:bg-emerald-400 disabled:opacity-40"
         >
           {loading ? "확인 중…" : "서재 연결하기"}

@@ -1,7 +1,7 @@
 import pLimit from "p-limit";
 import type { RidiCreds } from "./types";
 
-const UA =
+const DEFAULT_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36";
 
 // ---- global rate control (shared across every RIDI call) ----
@@ -29,8 +29,15 @@ export function schedule<T>(fn: () => Promise<T>): Promise<T> {
 
 export class RidiAuthError extends Error {
   constructor(public status: number) {
-    super(`RIDI auth failed (${status}) — ridi-at 쿠키가 만료되었거나 유효하지 않습니다.`);
+    super(`RIDI auth failed (${status}): ridi-at 쿠키가 만료되었거나 유효하지 않습니다.`);
     this.name = "RidiAuthError";
+  }
+}
+
+export class RidiCloudflareError extends Error {
+  constructor(public status: number) {
+    super(`RIDI request blocked (${status}): cf_clearance 또는 User-Agent 확인이 필요합니다.`);
+    this.name = "RidiCloudflareError";
   }
 }
 
@@ -56,7 +63,7 @@ interface GetOpts {
 export async function ridiGet<T>(url: string, opts: GetOpts = {}): Promise<T> {
   const { creds, retries = 2, revalidate } = opts;
   const headers: Record<string, string> = {
-    "User-Agent": UA,
+    "User-Agent": creds?.userAgent ?? DEFAULT_UA,
     Accept: "application/json, text/plain, */*",
     "Accept-Language": "ko,en-US;q=0.9,en;q=0.8",
     Referer: "https://ridibooks.com/",
@@ -74,13 +81,12 @@ export async function ridiGet<T>(url: string, opts: GetOpts = {}): Promise<T> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const res = await schedule(() => fetch(url, init));
-      if (res.status === 401 || res.status === 403) {
-        throw new RidiAuthError(res.status);
-      }
+      if (res.status === 401) throw new RidiAuthError(res.status);
+      if (res.status === 403) throw new RidiCloudflareError(res.status);
       if (!res.ok) throw new Error(`RIDI ${res.status} for ${url}`);
       return (await res.json()) as T;
     } catch (err) {
-      if (err instanceof RidiAuthError) throw err;
+      if (err instanceof RidiAuthError || err instanceof RidiCloudflareError) throw err;
       lastErr = err;
       if (attempt < retries) await sleep(400 * (attempt + 1));
     }
