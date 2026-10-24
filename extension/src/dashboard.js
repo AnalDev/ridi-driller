@@ -330,7 +330,7 @@ function renderResults() {
   $("result-scope").textContent = rows.length === rowsForTab().length ? "전체 결과" : `필터 적용 · 전체 ${rowsForTab().length.toLocaleString("ko-KR")}개`;
   if (rows.length === 0) {
     results.append(el("div", "empty", state.tab === "stores"
-      ? "연결된 외부 서점 구매 기록이 없습니다. 서점별 로컬 커넥터는 다음 단계에서 연결합니다."
+      ? "저장된 구매 기록이 없습니다. 서점 구매내역 페이지에서 확장 팝업의 현재 페이지 가져오기를 실행하세요."
       : state.tab === "notes"
         ? "수집된 RIDI 독서노트가 없습니다. 독서노트 페이지를 열어 동기화한 기록부터 표시합니다."
         : "조건에 맞는 작품이 없습니다."));
