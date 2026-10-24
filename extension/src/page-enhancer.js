@@ -1,5 +1,5 @@
 (async () => {
-  const { classifyPageBook, createPageLookup } = await import(
+  const { classifyPageBook, createPageLookup, selectBadgeStatuses } = await import(
     chrome.runtime.getURL("src/page-index.js")
   );
 
@@ -156,15 +156,16 @@
   }
 
   function renderBadges(item) {
-    const signature = item.statuses.map((status) => `${status.key}:${statusTitle(status)}`).join("|");
+    const badges = selectBadgeStatuses(item.statuses, item.pageKind);
+    const signature = badges.map((status) => `${status.key}:${statusTitle(status)}`).join("|");
     const currentBadge = item.badgeAnchor?.querySelector(`:scope > .${BADGE_CLASS}`);
     if (
       item.card.dataset.ridiDrillerBadges === signature &&
-      (item.statuses.length === 0 || currentBadge)
+      (badges.length === 0 || currentBadge)
     ) return;
     item.card.dataset.ridiDrillerBadges = signature;
     for (const badge of item.card.querySelectorAll(`.${BADGE_CLASS}`)) badge.remove();
-    if (!item.badgeAnchor || item.statuses.length === 0) return;
+    if (!item.badgeAnchor || badges.length === 0) return;
 
     item.badgeAnchor.classList.add("ridi-driller-badge-anchor");
     const host = document.createElement("span");
@@ -178,7 +179,7 @@
     `;
     const stack = document.createElement("span");
     stack.className = "stack";
-    for (const status of item.statuses.slice(0, 4)) {
+    for (const status of badges) {
       const badge = document.createElement("span");
       badge.className = "badge";
       badge.style.background = STATUS_META[status.key]?.color || "#52525b";

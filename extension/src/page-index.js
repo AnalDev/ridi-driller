@@ -1,6 +1,12 @@
 export const PAGE_INDEX_VERSION = 1;
 
 const STATUS_KEYS = ["newVolume", "unread", "finished", "authorNew"];
+const BADGE_PRIORITIES = {
+  purchases: ["owned", "ownedSeries", "newVolume", "unread", "finished", "interestUpdate", "interest", "authorNew"],
+  shelves: ["owned", "ownedSeries", "newVolume", "unread", "finished", "interestUpdate", "interest", "authorNew"],
+  interest: ["interestUpdate", "interest", "newVolume", "unread", "finished", "owned", "ownedSeries", "authorNew"],
+  releases: ["interestUpdate", "owned", "ownedSeries", "newVolume", "interest", "authorNew", "unread", "finished"],
+};
 
 export function normalizeBookTitle(value) {
   return String(value ?? "")
@@ -116,4 +122,12 @@ export function classifyPageBook(lookup, { bookId, title, pageKind }) {
   }
 
   return statuses;
+}
+
+export function selectBadgeStatuses(statuses, pageKind, limit = 4) {
+  const priority = BADGE_PRIORITIES[pageKind] ?? [];
+  const rank = new Map(priority.map((key, index) => [key, index]));
+  return [...statuses]
+    .sort((a, b) => (rank.get(a.key) ?? priority.length) - (rank.get(b.key) ?? priority.length))
+    .slice(0, limit);
 }

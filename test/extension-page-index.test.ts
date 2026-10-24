@@ -4,6 +4,7 @@ import {
   classifyPageBook,
   createPageLookup,
   normalizeBookTitle,
+  selectBadgeStatuses,
 } from "../extension/src/page-index.js";
 
 describe("RIDI page enhancement index", () => {
@@ -79,5 +80,17 @@ describe("RIDI page enhancement index", () => {
       classifyPageBook(lookup, { bookId: "unknown", title: "같은 시리즈", pageKind: "interest" })
         .map((status) => status.key),
     ).toEqual(["unread", "interest"]);
+  });
+
+  it("keeps interest context visible when a card has more than four statuses", () => {
+    const statuses = ["ownedSeries", "newVolume", "unread", "interest", "interestUpdate"]
+      .map((key) => ({ key, record: null }));
+
+    expect(selectBadgeStatuses(statuses, "interest").map((status) => status.key)).toEqual([
+      "interestUpdate",
+      "interest",
+      "newVolume",
+      "unread",
+    ]);
   });
 });
