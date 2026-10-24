@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>리디 드릴러 서지 관리</title>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <img src="../icons/icon48.png" alt="">
+        <div><strong>리디 드릴러</strong><span>서지 관리</span></div>
+      </div>
+      <nav id="tabs" aria-label="서지 보기"></nav>
+      <div class="sidebar-actions">
+        <button id="analyze" class="primary" type="button">서재 다시 분석</button>
+        <a href="https://ridibooks.com/library/books" target="_blank" rel="noreferrer">RIDI 구매 목록</a>
+        <a href="https://ridibooks.com/comics/new-releases?tab=CATEGORY_COMIC_ALL" target="_blank" rel="noreferrer">RIDI 만화 신작</a>
+      </div>
+    </aside>
+    <main>
+      <header class="topbar">
+        <div>
+          <h1 id="view-title">전체 서지</h1>
+          <p id="sync-status">저장된 분석을 불러오는 중</p>
+        </div>
+        <div class="progress" id="progress" hidden>
+          <span id="progress-text"></span>
+          <i><b id="progress-bar"></b></i>
+        </div>
+      </header>
+      <section class="metrics" id="metrics" aria-label="서재 요약"></section>
+      <section class="filters" aria-label="검색과 필터">
+        <label class="search-field">
+          <span>검색</span>
+          <input id="query" type="search" placeholder="작품명, 작가, 출판사, 메모">
+        </label>
+        <label>
+          <span>검색 범위</span>
+          <select id="search-field">
+            <option value="all">전체</option>
+            <option value="title">작품명</option>
+            <option value="author">작가</option>
+            <option value="publisher">출판사</option>
+            <option value="memo">메모</option>
+          </select>
+        </label>
+        <label>
+          <span>소장 상태</span>
+          <select id="ownership">
+            <option value="all">전체</option>
+            <option value="owned">소장</option>
+            <option value="partial">일부 소장</option>
+            <option value="unowned">미구매</option>
+          </select>
+        </label>
+        <label>
+          <span>독서 상태</span>
+          <select id="reading-state">
+            <option value="all">전체</option>
+            <option value="neverOpened">아직 안 읽음</option>
+            <option value="inProgress">읽는 중</option>
+            <option value="ownedComplete">보유분 완독</option>
+            <option value="caughtUp">현재 발매분 완독</option>
+            <option value="finished">완독</option>
+          </select>
+        </label>
+        <label>
+          <span>정렬</span>
+          <select id="sort">
+            <option value="default">추천순</option>
+            <option value="title">작품명순</option>
+            <option value="lastRead">최근 열람순</option>
+            <option value="purchase">최근 구매순</option>
+            <option value="missing">미구매 권수순</option>
+            <option value="rating">평점순</option>
+          </select>
+        </label>
+        <label class="toggle-field">
+          <input id="missing-only" type="checkbox">
+          <span>미구매 권 있음</span>
+        </label>
+        <button id="reset-filters" class="icon-button" type="button" title="필터 초기화" aria-label="필터 초기화">×</button>
+      </section>
+      <section class="result-head">
+        <strong id="result-count">0개</strong>
+        <span id="result-scope"></span>
+      </section>
+      <section id="results" class="results" aria-live="polite"></section>
+    </main>
+  </div>
+  <script type="module" src="dashboard.js"></script>
+</body>
+</html>

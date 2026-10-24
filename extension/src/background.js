@@ -144,6 +144,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       case "getPageIndex":
         sendResponse((await chrome.storage.local.get(PAGE_INDEX_KEY))[PAGE_INDEX_KEY] ?? null);
         break;
+      case "openDashboard": {
+        const hash = String(msg.hash ?? "all").replace(/[^a-zA-Z]/gu, "") || "all";
+        await chrome.tabs.create({ url: chrome.runtime.getURL(`src/dashboard.html#${hash}`) });
+        sendResponse({ ok: true });
+        break;
+      }
       case "running":
         sendResponse({ running });
         break;
