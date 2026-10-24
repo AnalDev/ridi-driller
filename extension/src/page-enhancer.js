@@ -6,6 +6,7 @@
   const TOOLBAR_ID = "ridi-driller-page-tools";
   const BADGE_CLASS = "ridi-driller-card-badges";
   const HIDDEN_CLASS = "ridi-driller-card-hidden";
+  const LIBRARY_COVER_SELECTOR = 'img[alt$="표지"], [role="img"][aria-label$="표지"]';
   const STATUS_META = {
     owned: { label: "소장", color: "#167a55" },
     ownedSeries: { label: "소장 시리즈", color: "#267464" },
@@ -77,7 +78,7 @@
     let best = node;
     for (let depth = 0; node && depth < 8; depth += 1, node = node.parentElement) {
       if (node.matches("main, body, html")) break;
-      const covers = node.querySelectorAll('img[alt$="표지"], [role="img"][aria-label]');
+      const covers = node.querySelectorAll(LIBRARY_COVER_SELECTOR);
       if (covers.length === 1) best = node;
       if (covers.length > 1) break;
     }
@@ -87,7 +88,7 @@
   function collectLibraryCards(kind) {
     const cards = [];
     const seen = new Set();
-    for (const image of document.querySelectorAll('img[alt$="표지"], [role="img"][aria-label]')) {
+    for (const image of document.querySelectorAll(LIBRARY_COVER_SELECTOR)) {
       const title = cleanTitle(image.getAttribute("alt") || image.getAttribute("aria-label"));
       if (!title) continue;
       const card = libraryCardFor(image);
@@ -156,9 +157,13 @@
 
   function renderBadges(item) {
     const signature = item.statuses.map((status) => `${status.key}:${statusTitle(status)}`).join("|");
-    if (item.card.dataset.ridiDrillerBadges === signature) return;
+    const currentBadge = item.badgeAnchor?.querySelector(`:scope > .${BADGE_CLASS}`);
+    if (
+      item.card.dataset.ridiDrillerBadges === signature &&
+      (item.statuses.length === 0 || currentBadge)
+    ) return;
     item.card.dataset.ridiDrillerBadges = signature;
-    item.badgeAnchor?.querySelector(`:scope > .${BADGE_CLASS}`)?.remove();
+    for (const badge of item.card.querySelectorAll(`.${BADGE_CLASS}`)) badge.remove();
     if (!item.badgeAnchor || item.statuses.length === 0) return;
 
     item.badgeAnchor.classList.add("ridi-driller-badge-anchor");
