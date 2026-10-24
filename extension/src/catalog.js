@@ -64,7 +64,7 @@ export function buildCatalog({ units, meta, lastRead }) {
       publisher: book.publisher?.name ?? "",
       cover: `https://img.ridicdn.net/cover/${unit.b_id}/large`,
       storeUrl: `https://ridibooks.com/books/${unit.b_id}`,
-      readerUrl: `https://ridibooks.com/books/${unit.b_id}/view`,
+      readerUrl: `https://ridibooks.com/books/${recent?.bookId ?? unit.b_id}/view`,
       contentType: contentType(book),
       category: book.categories?.[0]?.name ?? "",
       fileFormat: book.file?.format ?? "",

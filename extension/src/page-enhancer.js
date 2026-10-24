@@ -27,6 +27,7 @@
   };
   const FILTERS = [
     ["all", "전체"],
+    ["attention", "미구매 또는 미독"],
     ["owned", "소장"],
     ["unowned", "미구매"],
     ["newVolume", "신권"],
@@ -215,6 +216,7 @@
     const keys = new Set(item.statuses.map((status) => status.key));
     if (filter === "owned") return keys.has("owned") || keys.has("ownedSeries");
     if (filter === "unowned") return !keys.has("owned") && !keys.has("ownedSeries");
+    if (filter === "attention") return filterMatches(item, "unowned") || keys.has("unread");
     return keys.has(filter);
   }
 
@@ -259,7 +261,9 @@
       host = document.createElement("div");
       host.id = TOOLBAR_ID;
       host.attachShadow({ mode: "open" });
-      document.documentElement.append(host);
+      const list = currentCards[0]?.card?.parentElement;
+      if (list && !list.matches("body,html")) list.insertAdjacentElement("beforebegin", host);
+      else (document.querySelector("main,[role='main']") || document.body).prepend(host);
     }
     const counts = toolbarCounts();
     const availableFilters = FILTERS.filter(([key]) => key === "all" || counts[key] > 0);
@@ -281,8 +285,8 @@
     shadow.replaceChildren();
     const style = document.createElement("style");
     style.textContent = `
-      :host { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:2147482999; color:#18181b; font:13px/1.4 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif; letter-spacing:0; }
-      .bar { display:flex; align-items:center; gap:8px; max-width:min(1180px,calc(100vw - 24px)); padding:8px 10px; border:1px solid #d4d4d8; border-radius:7px; background:rgba(255,255,255,.98); box-shadow:0 8px 24px rgba(0,0,0,.16); }
+      :host { display:block; position:relative; z-index:20; width:min(1180px,calc(100% - 24px)); margin:14px auto; color:#18181b; font:13px/1.4 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif; letter-spacing:0; }
+      .bar { display:flex; align-items:center; gap:8px; width:100%; padding:9px 10px; border-block:1px solid #d4d4d8; background:#fff; }
       .title { white-space:nowrap; font-weight:700; }
       .modes { display:flex; gap:2px; overflow-x:auto; scrollbar-width:none; }
       .modes::-webkit-scrollbar { display:none; }
@@ -298,7 +302,7 @@
       .open { border:1px solid #d4d4d8; background:#fff; color:#27272a; }
       .progress { max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#52525b; font-size:12px; }
       @media (prefers-color-scheme:dark) { .bar { border-color:#3f3f46; background:rgba(24,24,27,.98); color:#f4f4f5; } button { background:#27272a; color:#d4d4d8; } button:hover { background:#3f3f46; color:#fff; } .search { border-color:#3f3f46; background:#18181b; } .search select,.search input { color:#e4e4e7; } .search select { border-color:#3f3f46; } .open { border-color:#52525b; background:#27272a; } .count,.progress { color:#a1a1aa; } }
-      @media (max-width:820px) { :host { bottom:8px; } .bar { flex-wrap:wrap; gap:6px; padding:6px 8px; } .title { display:none; } .modes { order:3; width:100%; } .search { flex:1; } .search input { width:100%; min-width:80px; } }
+      @media (max-width:820px) { :host { width:100%; margin:8px 0; } .bar { flex-wrap:wrap; gap:6px; padding:7px 8px; } .title { display:none; } .modes { order:3; width:100%; } .search { flex:1; } .search input { width:100%; min-width:80px; } }
     `;
     const bar = document.createElement("div");
     bar.className = "bar";
@@ -457,8 +461,8 @@
     const shadow = host.attachShadow({ mode: "open" });
     const style = document.createElement("style");
     style.textContent = `
-      :host { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:2147482999; color:#18181b; font:13px/1.35 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif; letter-spacing:0; }
-      .bar { display:flex; align-items:center; gap:9px; max-width:min(940px,calc(100vw - 24px)); padding:9px 10px; border:1px solid #d4d4d8; border-radius:7px; background:rgba(255,255,255,.98); box-shadow:0 8px 24px rgba(0,0,0,.16); }
+      :host { display:block; position:relative; z-index:20; width:min(940px,calc(100% - 24px)); margin:14px auto; color:#18181b; font:13px/1.35 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif; letter-spacing:0; }
+      .bar { display:flex; align-items:center; gap:9px; width:100%; padding:10px; border-block:1px solid #d4d4d8; background:#fff; }
       .brand { font-weight:800; white-space:nowrap; }
       .status { display:flex; gap:4px; overflow:hidden; }
       .badge { flex:none; border-radius:4px; padding:3px 6px; color:#fff; font-size:11px; font-weight:700; white-space:nowrap; }
@@ -467,7 +471,7 @@
       a,button { min-height:31px; display:inline-flex; align-items:center; justify-content:center; border:1px solid #d4d4d8; border-radius:5px; padding:5px 9px; background:#fff; color:#27272a; cursor:pointer; text-decoration:none; font:600 12px/1.2 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif; letter-spacing:0; white-space:nowrap; }
       a.primary { border-color:#167a55; background:#167a55; color:#fff; }
       @media (prefers-color-scheme:dark) { .bar { border-color:#3f3f46; background:rgba(24,24,27,.98); color:#f4f4f5; } .meta { color:#a1a1aa; } a,button { border-color:#52525b; background:#27272a; color:#f4f4f5; } }
-      @media (max-width:700px) { :host { bottom:8px; } .bar { flex-wrap:wrap; gap:6px; } .brand { display:none; } .status { max-width:100%; } .meta { order:3; width:100%; } }
+      @media (max-width:700px) { :host { width:100%; margin:8px 0; } .bar { flex-wrap:wrap; gap:6px; } .brand { display:none; } .status { max-width:100%; } .meta { order:3; width:100%; } }
     `;
     const bar = document.createElement("div");
     bar.className = "bar";
@@ -492,8 +496,15 @@
     }
     const meta = document.createElement("span");
     meta.className = "meta";
+    const readingLabels = {
+      neverOpened: "아직 안 읽음",
+      inProgress: "읽는 중",
+      ownedComplete: "보유분 완독",
+      caughtUp: "현재 발매분 완독",
+      finished: "완독",
+    };
     meta.textContent = record
-      ? `${formatDate(record.lastReadAt)} · 소장 ${record.ownedCount}/${record.totalCount}권`
+      ? `마지막 열람 ${formatDate(record.lastReadAt)} · ${readingLabels[record.readingState] ?? "독서 상태 미확인"} · 소장 ${record.ownedCount}/${record.totalCount}권`
       : "서재 분석에서 작품 기록을 찾지 못했습니다.";
     const actions = document.createElement("span");
     actions.className = "actions";
@@ -504,6 +515,12 @@
       read.textContent = "책 읽기";
       actions.append(read);
     }
+    if (record) {
+      const notes = document.createElement("a");
+      notes.href = `https://ridibooks.com/reading-note/detail/${record.lastReadBId || record.bId}`;
+      notes.textContent = "독서노트";
+      actions.append(notes);
+    }
     const purchase = document.createElement("button");
     purchase.type = "button";
     purchase.textContent = "구매 영역";
@@ -512,6 +529,7 @@
         /소장하기|선택 소장|구매하기/u.test(cleanTitle(button.textContent)),
       );
       target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      target?.focus({ preventScroll: true });
     });
     const dashboard = document.createElement("button");
     dashboard.type = "button";
@@ -520,7 +538,11 @@
     actions.append(purchase, dashboard);
     bar.append(brand, status, meta, actions);
     shadow.append(style, bar);
-    document.documentElement.append(host);
+    const heading = [...document.querySelectorAll("h1")]
+      .find((node) => normalizeBookTitle(node.textContent).includes(normalizeBookTitle(pageTitle)));
+    const anchor = heading?.parentElement;
+    if (anchor && !anchor.matches("body,html")) anchor.insertAdjacentElement("afterend", host);
+    else (document.querySelector("main,[role='main']") || document.body).prepend(host);
   }
 
   function cleanup() {

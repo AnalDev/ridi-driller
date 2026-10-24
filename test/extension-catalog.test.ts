@@ -54,6 +54,7 @@ describe("extension bibliography catalog", () => {
       missingCount: 2,
       lastReadVolume: 2,
       lastReadAt: "2026-10-20T10:00:00+09:00",
+      readerUrl: "https://ridibooks.com/books/2/view",
       readingState: "inProgress",
     })]);
   });
