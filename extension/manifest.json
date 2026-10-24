@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "리디 드릴러 — 서재 인핸서",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "내 리디 서재를 브라우저 세션 그대로 분석해 미보유 신권·안 읽은 책·작가 신작을 리디 페이지 안에 띄워줍니다.",
   "permissions": ["cookies", "storage"],
   "host_permissions": [
@@ -26,6 +26,12 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["src/page-index.js"],
+      "matches": ["*://ridibooks.com/*", "*://*.ridibooks.com/*"]
+    }
+  ],
   "content_scripts": [
     {
       "matches": [
@@ -35,6 +41,15 @@
       ],
       "js": ["src/content.js"],
       "css": ["src/content.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://library.ridibooks.com/*",
+        "https://ridibooks.com/comics/new-releases*"
+      ],
+      "js": ["src/page-enhancer.js"],
+      "css": ["src/page-enhancer.css"],
       "run_at": "document_idle"
     }
   ]

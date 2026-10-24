@@ -5,6 +5,7 @@ interface Manifest {
   version: string;
   host_permissions: string[];
   content_scripts: { matches: string[]; js: string[] }[];
+  web_accessible_resources: { resources: string[]; matches: string[] }[];
 }
 
 const manifest = JSON.parse(
@@ -17,6 +18,15 @@ describe("RIDI extension manifest", () => {
     expect(matches).toContain("https://library.ridibooks.com/*");
   });
 
+  it("enhances the library and current comics new-release pages", () => {
+    const enhancer = manifest.content_scripts.find((entry) => entry.js.includes("src/page-enhancer.js"));
+    expect(enhancer?.matches).toEqual([
+      "https://library.ridibooks.com/*",
+      "https://ridibooks.com/comics/new-releases*",
+    ]);
+    expect(manifest.web_accessible_resources[0]?.resources).toContain("src/page-index.js");
+  });
+
   it("keeps host access limited to RIDI", () => {
     expect(manifest.host_permissions).toEqual(["*://ridibooks.com/*", "*://*.ridibooks.com/*"]);
     expect(JSON.stringify(manifest)).not.toContain("vercel.app");
@@ -24,6 +34,6 @@ describe("RIDI extension manifest", () => {
   });
 
   it("ships the browser-session release", () => {
-    expect(manifest.version).toBe("0.2.0");
+    expect(manifest.version).toBe("0.3.0");
   });
 });

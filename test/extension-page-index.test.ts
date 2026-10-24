@@ -46,7 +46,7 @@ describe("RIDI page enhancement index", () => {
     expect(
       classifyPageBook(lookup, { bookId: "110", title: "대전 감사합니다 10권", pageKind: "releases" })
         .map((status) => status.key),
-    ).toEqual(["ownedSeries", "newVolume", "interest"]);
+    ).toEqual(["ownedSeries", "newVolume", "interest", "interestUpdate"]);
     expect(
       classifyPageBook(lookup, { bookId: "100", title: "대전 감사합니다", pageKind: "purchases" })
         .map((status) => status.key),

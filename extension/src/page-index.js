@@ -93,6 +93,9 @@ export function classifyPageBook(lookup, { bookId, title, pageKind }) {
   const interest = findRecord(lookup.interest, bookId, normalizedTitle);
   if (interest || pageKind === "interest") {
     statuses.push({ key: "interest", record: interest?.record ?? null });
+    if (Number(interest?.record?.newReleaseCount ?? 0) > 0) {
+      statuses.push({ key: "interestUpdate", record: interest.record });
+    }
   }
 
   return statuses;
