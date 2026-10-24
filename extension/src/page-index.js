@@ -1,0 +1,99 @@
+export const PAGE_INDEX_VERSION = 1;
+
+const STATUS_KEYS = ["newVolume", "unread", "finished", "authorNew"];
+
+export function normalizeBookTitle(value) {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .replace(/\[[^\]]*\]|【[^】]*】/gu, " ")
+    .replace(/\((?:완결|개정판|특별판|단행본|세트)\)/gu, " ")
+    .replace(/\d+(?:\.\d+)?\s*(?:권|화|부|편|volume|vol\.?)(?=$|[\s():.,-])/giu, " ")
+    .replace(/(?:완결|개정판|특별판|단행본)$/gu, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, "")
+    .toLowerCase();
+}
+
+function compactRecord(record, title = record.seriesTitle || record.title) {
+  return {
+    bId: String(record.bId ?? ""),
+    title: String(title ?? ""),
+    reason: String(record.reason ?? ""),
+  };
+}
+
+export function buildPageIndex({ units, recommendations, interestBooks = [], generatedAt = Date.now() }) {
+  const statuses = Object.fromEntries(
+    STATUS_KEYS.map((key) => [key, (recommendations[key] ?? []).map((record) => compactRecord(record))]),
+  );
+
+  return {
+    version: PAGE_INDEX_VERSION,
+    generatedAt,
+    owned: units.map((unit) => ({
+      bId: String(unit.b_id ?? ""),
+      title: String(unit.unit_title ?? ""),
+      unitId: String(unit.unit_id ?? ""),
+    })),
+    interest: interestBooks.map((book) => ({
+      bId: String(book.bookId ?? ""),
+      title: String(book.title ?? ""),
+      newReleaseCount: Number(book.newReleaseCount ?? 0),
+      isNotificationOn: Boolean(book.isNotificationOn),
+    })),
+    statuses,
+  };
+}
+
+function addRecord(lookup, record) {
+  if (record.bId) lookup.byId.set(String(record.bId), record);
+  const title = normalizeBookTitle(record.title);
+  if (title.length >= 2 && !lookup.byTitle.has(title)) lookup.byTitle.set(title, record);
+}
+
+export function createPageLookup(index) {
+  const lookup = {
+    owned: { byId: new Map(), byTitle: new Map() },
+    interest: { byId: new Map(), byTitle: new Map() },
+    statuses: Object.fromEntries(
+      STATUS_KEYS.map((key) => [key, { byId: new Map(), byTitle: new Map() }]),
+    ),
+  };
+
+  for (const record of index?.owned ?? []) addRecord(lookup.owned, record);
+  for (const record of index?.interest ?? []) addRecord(lookup.interest, record);
+  for (const key of STATUS_KEYS) {
+    for (const record of index?.statuses?.[key] ?? []) addRecord(lookup.statuses[key], record);
+  }
+  return lookup;
+}
+
+function findRecord(bucket, bookId, normalizedTitle) {
+  if (bookId && bucket.byId.has(String(bookId))) {
+    return { record: bucket.byId.get(String(bookId)), exact: true };
+  }
+  if (normalizedTitle && bucket.byTitle.has(normalizedTitle)) {
+    return { record: bucket.byTitle.get(normalizedTitle), exact: false };
+  }
+  return null;
+}
+
+export function classifyPageBook(lookup, { bookId, title, pageKind }) {
+  const normalizedTitle = normalizeBookTitle(title);
+  const statuses = [];
+  const owned = findRecord(lookup.owned, bookId, normalizedTitle);
+  if (owned) {
+    statuses.push({ key: owned.exact ? "owned" : "ownedSeries", record: owned.record });
+  }
+
+  for (const key of STATUS_KEYS) {
+    const match = findRecord(lookup.statuses[key], bookId, normalizedTitle);
+    if (match) statuses.push({ key, record: match.record });
+  }
+
+  const interest = findRecord(lookup.interest, bookId, normalizedTitle);
+  if (interest || pageKind === "interest") {
+    statuses.push({ key: "interest", record: interest?.record ?? null });
+  }
+
+  return statuses;
+}

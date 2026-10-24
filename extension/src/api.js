@@ -8,6 +8,7 @@
 const LIB_API = "https://library-api.ridibooks.com";
 const BOOK_API = "https://book-api.ridibooks.com";
 const SEARCH_API = "https://search-api.ridibooks.com";
+const GRAPHQL_API = "https://api.ridibooks.com/graphql";
 const STORE = "https://ridibooks.com";
 const TOKEN_REFRESH_URL = "https://account.ridibooks.com/ridi/token";
 
@@ -88,21 +89,38 @@ export async function refreshAccessToken() {
   return refreshPromise;
 }
 
-export async function authGet(url, retryAuth = true) {
+async function authJson(url, init = {}, retryAuth = true) {
   const requestEpoch = authEpoch;
   const res = await fetch(url, {
+    ...init,
     credentials: "include",
-    headers: { Accept: "application/json, text/plain, */*" },
+    headers: { Accept: "application/json, text/plain, */*", ...init.headers },
     cache: "no-store",
   });
   if (res.status === 401 && retryAuth) {
     if (authEpoch === requestEpoch) await refreshAccessToken();
-    return authGet(url, false);
+    return authJson(url, init, false);
   }
   if (res.status === 401) throw new RidiAuthError(res.status);
   if (res.status === 403) throw new RidiCloudflareError(res.status);
   if (!res.ok) throw new Error(`리디 ${res.status}: ${url}`);
   return res.json();
+}
+
+export async function authGet(url, retryAuth = true) {
+  return authJson(url, {}, retryAuth);
+}
+
+export async function authPost(url, body, retryAuth = true) {
+  return authJson(
+    url,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+    retryAuth,
+  );
 }
 
 async function publicGet(url, retries = 2) {
@@ -256,6 +274,69 @@ export async function fetchAuthorBooksMany(authors, onProgress) {
     out.set(a.name, await fetchAuthorBooks(a.name, a.id));
   }, onProgress);
   return out;
+}
+
+// ---- api.ridibooks.com/graphql: 관심 작품 (인증) ----
+
+const INTEREST_QUERY = `
+  query RidiDrillerInterestBooks(
+    $categoryIncludes: [Int!]!
+    $pagination: UnFixedPageLimit!
+    $orderFilter: UserInterestBookOrderFilter!
+  ) {
+    userInterestBook(
+      categoryIncludes: $categoryIncludes
+      pagination: $pagination
+      orderFilter: $orderFilter
+    ) {
+      items {
+        ... on UserInterestSingleBook {
+          bookId
+          isNotificationOn
+          bookShell { book { title { main } } }
+        }
+        ... on UserInterestSeries {
+          bookId
+          isNotificationOn
+          newReleaseCount
+          bookShell { book { title { main } } }
+        }
+      }
+      totalItemCount
+    }
+  }
+`;
+
+export async function fetchInterestBooks(onProgress) {
+  const limit = 100;
+  const books = [];
+  let total = 0;
+  for (let offset = 0; offset === 0 || offset < total; offset += limit) {
+    const payload = await authPost(GRAPHQL_API, {
+      query: INTEREST_QUERY,
+      variables: {
+        categoryIncludes: [],
+        pagination: { limit, offset },
+        orderFilter: "UPDATE",
+      },
+    });
+    if (payload.errors?.length) throw new Error(payload.errors[0]?.message || "관심 작품 조회 실패");
+    const result = payload.data?.userInterestBook;
+    if (!result) throw new Error("관심 작품 응답 형식이 변경되었습니다.");
+    total = Number(result.totalItemCount ?? 0);
+    const items = result.items ?? [];
+    books.push(
+      ...items.map((item) => ({
+        bookId: String(item.bookId),
+        title: item.bookShell?.book?.title?.main ?? "",
+        newReleaseCount: Number(item.newReleaseCount ?? 0),
+        isNotificationOn: Boolean(item.isNotificationOn),
+      })),
+    );
+    onProgress?.(Math.min(books.length, total), total);
+    if (items.length === 0) break;
+  }
+  return books;
 }
 
 export const coverUrl = (bId, size) => `https://img.ridicdn.net/cover/${bId}/${size}`;

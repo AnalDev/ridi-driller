@@ -16,6 +16,7 @@ function renderSummary(r) {
   $("c-finished").textContent = r.counts.finished;
   $("c-author").textContent = r.counts.authorNew;
   $("c-owned").textContent = r.ownedUnits;
+  $("c-interest").textContent = r.counts.interest ?? "–";
   const secs = Math.round((r.elapsedMs ?? 0) / 1000);
   const when = new Date(r.generatedAt).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" });
   $("genat").textContent = `${when} 분석 · ${secs}초 소요`;

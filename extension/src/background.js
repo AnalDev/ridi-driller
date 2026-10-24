@@ -7,12 +7,15 @@ import {
   fetchAllUnits,
   fetchAuthorBooksMany,
   fetchBooksMeta,
+  fetchInterestBooks,
   fetchLastReadMany,
   getSession,
 } from "./api.js";
 import { buildRecommendations } from "./recommend.js";
+import { buildPageIndex } from "./page-index.js";
 
 const CACHE_KEY = "ridi_analysis";
+const PAGE_INDEX_KEY = "ridi_page_index";
 let running = false;
 
 function limitedRecommendations(recommendations) {
@@ -72,6 +75,16 @@ async function analyze({ withAuthors = true } = {}) {
 
     const recs = buildRecommendations({ units, meta, lastRead, authorBooks });
     const generatedAt = Date.now();
+    let interestBooks = [];
+    let interestAvailable = true;
+    try {
+      broadcast({ type: "progress", phase: "interest", message: "관심 작품 확인 중…", done: 0, total: 0 });
+      interestBooks = await fetchInterestBooks((done, total) =>
+        broadcast({ type: "progress", phase: "interest", message: `관심 작품 ${done}/${total}`, done, total }),
+      );
+    } catch {
+      interestAvailable = false;
+    }
     const result = {
       generatedAt,
       elapsedMs: Date.now() - started,
@@ -81,10 +94,13 @@ async function analyze({ withAuthors = true } = {}) {
         unread: recs.unread.length,
         finished: recs.finished.length,
         authorNew: recs.authorNew.length,
+        interest: interestBooks.length,
       },
+      interestAvailable,
       ...limitedRecommendations(recs),
     };
-    await chrome.storage.local.set({ [CACHE_KEY]: result });
+    const pageIndex = buildPageIndex({ units, recommendations: recs, interestBooks, generatedAt });
+    await chrome.storage.local.set({ [CACHE_KEY]: result, [PAGE_INDEX_KEY]: pageIndex });
     broadcast({ type: "done", result });
     return { result };
   } catch (err) {
@@ -112,6 +128,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         break;
       case "getCache":
         sendResponse((await chrome.storage.local.get(CACHE_KEY))[CACHE_KEY] ?? null);
+        break;
+      case "getPageIndex":
+        sendResponse((await chrome.storage.local.get(PAGE_INDEX_KEY))[PAGE_INDEX_KEY] ?? null);
         break;
       case "running":
         sendResponse({ running });

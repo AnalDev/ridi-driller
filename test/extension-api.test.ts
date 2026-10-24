@@ -85,4 +85,34 @@ describe("RIDI extension authentication", () => {
 
     await expect(getSession()).resolves.toMatchObject({ loggedIn: true, refreshable: true, refreshed: true });
   });
+
+  it("paginates the current RIDI interest GraphQL API", async () => {
+    const first = Array.from({ length: 100 }, (_, index) => ({
+      bookId: String(index + 1),
+      isNotificationOn: index === 0,
+      newReleaseCount: index === 0 ? 2 : 0,
+      bookShell: { book: { title: { main: `관심 ${index + 1}` } } },
+    }));
+    const second = [{
+      bookId: "101",
+      isNotificationOn: false,
+      bookShell: { book: { title: { main: "관심 101" } } },
+    }];
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ data: { userInterestBook: { items: first, totalItemCount: 101 } } }))
+      .mockResolvedValueOnce(Response.json({ data: { userInterestBook: { items: second, totalItemCount: 101 } } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { fetchInterestBooks } = await loadApi();
+
+    const progress = vi.fn();
+    const books = await fetchInterestBooks(progress);
+
+    expect(books).toHaveLength(101);
+    expect(books[0]).toMatchObject({ bookId: "1", title: "관심 1", newReleaseCount: 2 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const secondRequest = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
+    expect(secondRequest.variables.pagination).toEqual({ limit: 100, offset: 100 });
+    expect(progress).toHaveBeenLastCalledWith(101, 101);
+  });
 });
