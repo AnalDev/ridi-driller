@@ -50,7 +50,9 @@ Vercel에서 개인 서재를 직접 분석하는 방식은 Cloudflare가 서버
 
 분석 결과는 확장의 `서지 관리 열기`에서 전체 웹페이지로 표시됩니다.
 
-확장 버전 `0.4.0`은 구매 목록·내 책장·관심 작품과 [만화 신작](https://ridibooks.com/comics/new-releases?tab=CATEGORY_COMIC_ALL) 카드에 소장·읽기·관심 상태 배지와 인라인 필터를 추가합니다.
+확장 버전 `0.4.0`은 구매 목록·내 책장·관심 작품과 [만화 신작](https://ridibooks.com/comics/new-releases?tab=CATEGORY_COMIC_ALL)에 API 전체 결과를 사용하는 인라인 목록·검색·필터·페이지네이션을 추가합니다.
+
+RIDI 원본 페이지 번호는 유지하지만 확장 목록은 `chrome.storage.local`의 전체 색인에서 24·48·96개 단위로 별도 페이지를 구성합니다.
 
 작품 상세에는 마지막 열람 시각·독서 상태·소장 권수와 읽기·구매·독서노트 바로가기를 RIDI 본문 안에 표시합니다.
 

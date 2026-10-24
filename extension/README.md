@@ -29,23 +29,29 @@ RIDI와 외부 서점의 로그인 쿠키·비밀번호를 복사하거나 Verce
 
 작품명·작가·출판사·메모 검색과 서점·소장 상태·독서 상태·미구매 권 필터를 함께 적용할 수 있습니다.
 
+RIDI 본문 인라인 목록은 원본 페이지 번호와 별개로 전체 로컬 색인을 24·48·96개 단위로 나눕니다.
+
 작품별 로컬 메모는 `chrome.storage.local`에만 저장됩니다.
 
 ## RIDI 페이지 인핸서
 
 | RIDI 화면 | 주소 | 추가 기능 |
 |---|---|---|
-| 구매 목록 | [ridibooks.com/library/books](https://ridibooks.com/library/books) | 소장·읽기·신권·관심 배지, 제목·작가 검색, 복수 상태 필터 |
-| 내 책장 | [ridibooks.com/library/shelves](https://ridibooks.com/library/shelves) 및 개별 책장 | 소장·읽기·신권·관심 배지와 필터 |
-| 관심 작품 | [ridibooks.com/library/serial-preferences](https://ridibooks.com/library/serial-preferences) | 관심·새 이야기 배지와 필터 |
-| 만화 신작 | [ridibooks.com/comics/new-releases](https://ridibooks.com/comics/new-releases?tab=CATEGORY_COMIC_ALL) | 소장·미구매·신권·내 작가·관심 배지와 필터 |
+| 구매 목록 | [ridibooks.com/library/books](https://ridibooks.com/library/books) | 전체 구매 작품 인라인 목록, 페이지네이션, 소장·읽기·신권·관심 필터 |
+| 내 책장 | [ridibooks.com/library/shelves](https://ridibooks.com/library/shelves) 및 개별 책장 | 전체 책장·책장별 전체 작품 인라인 목록과 페이지네이션 |
+| 관심 작품 | [ridibooks.com/library/serial-preferences](https://ridibooks.com/library/serial-preferences) | 전체 관심 작품 인라인 목록, 관심·새 이야기 필터 |
+| 만화 신작 | [ridibooks.com/comics/new-releases](https://ridibooks.com/comics/new-releases?tab=CATEGORY_COMIC_ALL) | 11개 장르 전체 신간 인라인 목록, 장르·소장·미구매·신권·내 작가·관심 필터 |
 | 작품 상세 | `ridibooks.com/books/{id}` | 마지막 열람·독서 상태·소장 권수, 책 읽기·구매·독서노트·서지 관리 동선 |
 
-도구 영역은 화면 위에 떠 있는 카드가 아니라 RIDI 본문 흐름에 들어갑니다.
+도구와 결과는 화면 위에 떠 있는 카드나 호버 레이어가 아니라 RIDI 본문 흐름에 들어갑니다.
 
 `미구매 또는 미독`은 두 상태의 합집합이고, 그 밖의 복수 상태 버튼은 교집합으로 적용됩니다.
 
-RIDI 원본 카드와 구매 버튼은 교체하지 않으며 필터 초기화 시 숨겼던 원본 카드를 모두 복구합니다.
+RIDI 원본 카드·페이지네이션·구매 버튼은 숨기거나 교체하지 않습니다.
+
+구매 목록과 관심 작품은 인증 API의 마지막 페이지까지, 신간은 장르별 `next_page`가 끝날 때까지, 책장은 count 기준 마지막 오프셋까지 수집합니다.
+
+전체 신간·책장 캐시는 30분 동안 재사용하고, 저장된 결과를 먼저 보여준 뒤 만료 데이터만 갱신합니다.
 
 책 ID가 없는 라이브러리 카드는 제목을 보조 키로 사용하므로 동명 작품이나 제목 변경이 있으면 오탐·누락될 수 있습니다.
 
