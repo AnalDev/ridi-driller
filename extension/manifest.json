@@ -28,7 +28,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["src/page-index.js"],
+      "resources": ["src/page-index.js", "src/reading-notes.js"],
       "matches": ["*://ridibooks.com/*", "*://*.ridibooks.com/*"]
     }
   ],
@@ -42,6 +42,11 @@
       ],
       "js": ["src/page-enhancer.js"],
       "css": ["src/page-enhancer.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://ridibooks.com/reading-note/*"],
+      "js": ["src/reading-notes-content.js"],
       "run_at": "document_idle"
     }
   ]

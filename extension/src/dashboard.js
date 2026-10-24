@@ -49,6 +49,10 @@ function formatDate(value, withTime = false) {
     : { dateStyle: "medium" }).format(date);
 }
 
+function timestamp(value) {
+  return value ? Date.parse(value) || 0 : 0;
+}
+
 function catalogByTitle() {
   return new Map((state.index?.catalog ?? []).map((record) => [normalize(record.title), record]));
 }
@@ -101,15 +105,23 @@ function interestRows() {
 }
 
 function noteRows() {
-  return state.readingNotes.map((record, index) => ({
-    ...record,
-    key: record.key || `reading-note:${index}`,
-    source: "ridi",
-    sourceLabel: "RIDI 독서노트",
-    ownership: "owned",
-    statuses: ["note"],
-    storeUrl: record.bookId ? `https://ridibooks.com/books/${record.bookId}` : record.storeUrl,
-  }));
+  const byBookId = new Map((state.index?.catalog ?? []).map((record) => [String(record.bId), record]));
+  return state.readingNotes.map((record, index) => {
+    const book = byBookId.get(String(record.bookId));
+    return {
+      ...book,
+      ...record,
+      key: record.key || `reading-note:${index}`,
+      source: "ridi",
+      sourceLabel: "RIDI 독서노트",
+      ownership: book?.ownership ?? "owned",
+      cover: book?.cover || (record.bookId ? `https://img.ridicdn.net/cover/${record.bookId}/large` : ""),
+      authors: book?.authors ?? [],
+      publisher: book?.publisher ?? "",
+      statuses: ["note", record.noteType].filter(Boolean),
+      storeUrl: record.bookId ? `https://ridibooks.com/books/${record.bookId}` : record.storeUrl,
+    };
+  });
 }
 
 function storeRows() {
@@ -166,8 +178,8 @@ function filteredRows() {
   const sort = $("sort").value;
   const textSort = (a, b) => String(a.title ?? "").localeCompare(String(b.title ?? ""), "ko");
   if (sort === "title") rows.sort(textSort);
-  if (sort === "lastRead") rows.sort((a, b) => Date.parse(b.lastReadAt ?? 0) - Date.parse(a.lastReadAt ?? 0));
-  if (sort === "purchase") rows.sort((a, b) => Date.parse(b.purchaseDate ?? 0) - Date.parse(a.purchaseDate ?? 0));
+  if (sort === "lastRead") rows.sort((a, b) => timestamp(b.lastReadAt) - timestamp(a.lastReadAt));
+  if (sort === "purchase") rows.sort((a, b) => timestamp(b.purchaseDate) - timestamp(a.purchaseDate));
   if (sort === "missing") rows.sort((a, b) => Number(b.missingCount ?? b.missing ?? 0) - Number(a.missingCount ?? a.missing ?? 0) || textSort(a, b));
   if (sort === "rating") rows.sort((a, b) => Number(b.rating ?? 0) - Number(a.rating ?? 0) || textSort(a, b));
   return rows;
@@ -190,6 +202,9 @@ function rowBadges(record) {
   if ((record.statuses ?? []).includes("interestUpdate")) addBadge(host, `새 이야기 ${record.newReleaseCount}`, "blue");
   if ((record.statuses ?? []).includes("authorNew")) addBadge(host, "구매 작가의 다른 작품", "pink");
   if ((record.statuses ?? []).includes("note")) addBadge(host, "독서노트", "amber");
+  if ((record.statuses ?? []).includes("highlight")) addBadge(host, "형광펜");
+  if ((record.statuses ?? []).includes("memo")) addBadge(host, "RIDI 메모", "pink");
+  if ((record.statuses ?? []).includes("bookmark")) addBadge(host, "책갈피");
   return host;
 }
 
@@ -252,16 +267,31 @@ function renderBookRow(record) {
 
   const facts = el("div", "book-facts");
   const grid = el("div", "fact-grid");
-  grid.append(
-    fact("구매", formatDate(record.purchaseDate)),
-    fact("마지막 열람", formatDate(record.lastReadAt, true)),
-    fact("최근 권", record.lastReadVolume ? `${record.lastReadVolume}권` : "확인 안 됨"),
-    fact("권수", record.totalCount ? `소장 ${record.ownedCount ?? 0} / 발매 ${record.totalCount}${Number(record.missingCount ?? record.missing ?? 0) > 0 ? ` · 미구매 ${record.missingCount ?? record.missing}` : ""}` : "확인 안 됨"),
-  );
+  if ((record.statuses ?? []).includes("note")) {
+    const noteLabels = { highlight: "형광펜", memo: "메모", bookmark: "책갈피" };
+    grid.append(
+      fact("기록", formatDate(record.notedAt)),
+      fact("유형", noteLabels[record.noteType] ?? "독서노트"),
+    );
+  } else {
+    grid.append(
+      fact("구매", formatDate(record.purchaseDate)),
+      fact("마지막 열람", formatDate(record.lastReadAt, true)),
+      fact("최근 권", record.lastReadVolume ? `${record.lastReadVolume}권` : "확인 안 됨"),
+      fact("권수", record.totalCount ? `소장 ${record.ownedCount ?? 0} / 발매 ${record.totalCount}${Number(record.missingCount ?? record.missing ?? 0) > 0 ? ` · 미구매 ${record.missingCount ?? record.missing}` : ""}` : "확인 안 됨"),
+    );
+  }
   facts.append(grid);
   row.append(facts);
 
   const actions = el("div", "actions");
+  if (record.noteUrl) {
+    const note = el("a", "primary", "독서노트 열기");
+    note.href = record.noteUrl;
+    note.target = "_blank";
+    note.rel = "noreferrer";
+    actions.append(note);
+  }
   if (record.readerUrl && record.ownership !== "unowned") {
     const read = el("a", "primary", "책 읽기");
     read.href = record.readerUrl;
@@ -393,6 +423,7 @@ chrome.runtime.onMessage.addListener((message) => {
     $("sync-status").textContent = message.message;
     $("sync-status").classList.add("error");
   }
+  if (message.type === "readingNotesUpdated") void loadStorage();
 });
 
 for (const id of ["query", "search-field", "ownership", "reading-state", "sort", "missing-only"]) {
