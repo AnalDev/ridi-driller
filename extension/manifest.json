@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "리디 드릴러 — 서재 인핸서",
-  "version": "0.3.2",
-  "description": "내 리디 서재를 브라우저 세션 그대로 분석해 미보유 신권·안 읽은 책·작가 신작을 리디 페이지 안에 띄워줍니다.",
+  "version": "0.4.0",
+  "description": "RIDI 서재·독서노트와 서점 구매 기록을 로컬 서지로 합치고 RIDI 페이지를 개선합니다.",
   "permissions": ["activeTab", "cookies", "scripting", "storage"],
   "host_permissions": [
     "*://ridibooks.com/*",
