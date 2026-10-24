@@ -28,7 +28,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["src/page-index.js", "src/reading-notes.js"],
+      "resources": ["src/page-index.js", "src/page-view.js", "src/reading-notes.js"],
       "matches": ["*://ridibooks.com/*", "*://*.ridibooks.com/*"]
     },
     {

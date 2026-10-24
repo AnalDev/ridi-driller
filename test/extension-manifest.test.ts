@@ -29,6 +29,7 @@ describe("RIDI extension manifest", () => {
       "https://ridibooks.com/books/*",
     ]);
     expect(manifest.web_accessible_resources[0]?.resources).toContain("src/page-index.js");
+    expect(manifest.web_accessible_resources[0]?.resources).toContain("src/page-view.js");
   });
 
   it("keeps host access limited to RIDI", () => {
