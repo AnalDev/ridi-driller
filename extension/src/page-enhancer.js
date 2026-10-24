@@ -518,7 +518,7 @@
       analyze.addEventListener("click", () => void send("analyze", { opts: { withAuthors: true } }));
       actions.append(analyze);
     }
-    const sync = el("button", "", "전체 새로고침");
+    const sync = el("button", "", ["purchases", "interest"].includes(kind) ? "서재 다시 분석" : "전체 새로고침");
     sync.type = "button";
     sync.addEventListener("click", () => void refreshCatalog(kind, true));
     const dashboard = el("a", "button primary", "서지 관리");
@@ -797,7 +797,12 @@
   }
 
   async function refreshCatalog(kind, force = false) {
-    if (kind === "releases") {
+    if (force && ["purchases", "interest"].includes(kind)) {
+      progressMessage = "전체 서재를 다시 분석하는 중";
+      scheduleRender();
+      const result = await send("analyze", { opts: { withAuthors: true } });
+      if (result?.error) progressMessage = result.error;
+    } else if (kind === "releases") {
       progressMessage = "전체 신간을 장르별로 불러오는 중";
       scheduleRender();
       const catalog = await send("syncReleaseCatalog", { force });
