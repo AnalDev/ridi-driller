@@ -70,7 +70,10 @@ describe("RIDI inline page tools", () => {
     expect(source).toContain('let active = kind === "authorNew" || (isListActive(prefs, kind) && view.rows.length > 0);');
     // 결과는 도구 줄 안이 아니라 원본 목록이 있던 자리에 그리고, 그동안 원본 목록·쪽 번호를 가린다
     expect(source).toContain("const resultsHost = ensureResultsHost(host);");
-    expect(source).toContain('if (host.nextElementSibling !== anchor) anchor.insertAdjacentElement("beforebegin", host);');
+    // 자리 조건은 "앞에 있기만 하면 됨" — 바로 앞을 고집하면 다른 요소와 자리를 뺏으며 무한히 다시 끼운다
+    expect(source).toContain("host.compareDocumentPosition(anchor) & Node.DOCUMENT_POSITION_FOLLOWING");
+    expect(source).not.toContain("host.nextElementSibling !== anchor");
+    expect(storeSource).not.toContain("host.nextElementSibling !== inline");
     expect(source).toContain('setNativeHidden(showResults, kind === "authorNew" ? [nativeToolbar()] : []);');
     expect(styleSource).toContain('[data-ridi-driller-native="hidden"] { display: none !important; }');
     expect(styleSource).not.toContain("data-replace");
@@ -260,8 +263,44 @@ describe("RIDI store enhancer", () => {
   it("highlights matching cards with a coloured outline without hiding anything", () => {
     expect(storeSource).toContain('const MARK_ATTR = "data-ridi-driller-mark";');
     expect(storeSource).toContain("cardHighlight(item.statuses, prefs)");
-    expect(styleSource).toContain('[data-ridi-driller-mark="authorNew"] { --ridi-driller-mark: #9333a8; }');
-    expect(storeSource).toContain("for (const [key, label, color] of HIGHLIGHT_OPTIONS)");
+    // 테두리는 표지 안쪽의 그라데이션 고리다. 카드 전체에 두르면 옆 카드와 붙는다.
+    expect(storeSource).toContain("if (key) highlighted.set(item.link, key);");
+    expect(styleSource).toContain("background: linear-gradient(135deg, var(--ridi-driller-a), var(--ridi-driller-b));");
+    expect(styleSource).toContain('[data-ridi-driller-mark="authorNew"] { --ridi-driller-a: #9333a8; --ridi-driller-b: #f472b6; }');
+    expect(styleSource).not.toContain("outline-offset: 3px");
+    expect(storeSource).toContain("for (const [key, label, color, colorEnd] of HIGHLIGHT_OPTIONS)");
+  });
+
+  it("decides badges and hiding before the browser paints new cards", () => {
+    // MutationObserver 콜백 안에서 바로 적용한다 (디바운스 뒤로 미루면 보였다 사라진다)
+    expect(storeSource).toContain("if (foreign) decorate();");
+    expect(source).toContain("if (foreign) decorateCards(kind);");
+    expect(storeSource).not.toContain("new MutationObserver(scheduleRender)");
+    expect(source).not.toContain("new MutationObserver(scheduleRender)");
+  });
+
+  it("still renders on pages whose DOM never stops changing", () => {
+    // 디바운스를 매번 다시 걸면 계속 바뀌는 화면에서는 한 번도 그려지지 않는다
+    for (const text of [source, storeSource]) {
+      expect(text).toContain("if (renderTimer) return;");
+      expect(text).not.toContain("if (renderTimer) clearTimeout(renderTimer);");
+    }
+  });
+
+  it("does not rebuild lists or toolbars when nothing they show has changed", () => {
+    expect(source).toContain("if (resultsHost.dataset.renderKey === renderKey && results.childElementCount > 0) return;");
+    expect(source).toContain("if (conditions && conditions.dataset.query !== prefs.query) {");
+    // 조건이 없을 때 버튼을 없애지 않고 비활성으로 둔다 → 필터를 걸어도 도구 줄이 밀리지 않는다
+    expect(source).toContain("if (resetButton) resetButton.disabled = !active;");
+    expect(source).not.toContain('"sort-direction active-only"');
+  });
+
+  it("hides RIDI's list while it refetches and shows it again only after it settles", () => {
+    // RIDI 가 목록 노드를 새로 만들어도 유지되도록 문서 뿌리에 상태를 단다
+    expect(source).toContain('root.setAttribute(BUSY_ATTR, "out");');
+    expect(source).toContain("container.style.minHeight = `${Math.round(container.getBoundingClientRect().height)}px`;");
+    expect(source).toContain("quiet = setTimeout(finish, 250);");
+    expect(styleSource).toContain('html[data-ridi-driller-busy="out"] #ridi-driller-integrated-view ~ * { opacity: 0 !important; pointer-events: none; }');
   });
 
   it("stores settings and the hide list locally only", () => {

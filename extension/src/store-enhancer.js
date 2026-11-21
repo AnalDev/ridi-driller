@@ -326,12 +326,14 @@
     const highlighted = new Map();
     for (const item of items) {
       const key = item.pageWork || marked.get(item.card) === "hide" ? null : cardHighlight(item.statuses, prefs);
-      if (key) highlighted.set(item.card, key);
+      // 테두리는 카드 전체가 아니라 표지에 두른다. 카드끼리는 간격이 거의 없어 전체에 두르면 서로 붙는다.
+      if (key) highlighted.set(item.link, key);
     }
     for (const node of document.querySelectorAll(`[${MARK_ATTR}]`)) {
       if (!highlighted.has(node)) node.removeAttribute(MARK_ATTR);
     }
     for (const [node, key] of highlighted) {
+      if (getComputedStyle(node).position === "static") node.classList.add("ridi-driller-badge-anchor");
       if (node.getAttribute(MARK_ATTR) !== key) node.setAttribute(MARK_ATTR, key);
     }
   }
@@ -433,7 +435,7 @@
       .only > span { color:var(--muted); }
       .only button { min-height:28px; border-radius:999px; padding:3px 11px; font-size:12px; }
       /* 강조 버튼: 카드 테두리와 같은 색 점으로 무엇이 어떤 색인지 알린다. */
-      .marks button::before { content:""; display:inline-block; width:8px; height:8px; margin-right:6px; border-radius:50%; background:var(--mark); vertical-align:1px; }
+      .marks button::before { content:""; display:inline-block; width:9px; height:9px; margin-right:6px; border-radius:50%; background:linear-gradient(135deg,var(--mark),var(--mark-b)); vertical-align:0; }
       .marks button[aria-pressed="true"] { border-color:var(--mark); background:var(--bg); color:var(--fg); box-shadow:inset 0 0 0 1px var(--mark); }
       .rating-range { display:inline-flex; align-items:center; gap:6px; font-size:12px; white-space:nowrap; }
       .rating-range input { width:120px; accent-color:var(--accent-text); }
@@ -603,7 +605,12 @@
     }
     // 만화 신작에는 전체 신간 검색 줄(page-enhancer)이 있다. 도구가 화면 두 곳에 흩어지지 않게 그 바로 위에 붙인다.
     const inline = document.getElementById("ridi-driller-integrated-view");
-    if (inline && host.nextElementSibling !== inline) inline.insertAdjacentElement("beforebegin", host);
+    // 그 줄보다 앞, 같은 부모 안에만 있으면 된다 ("바로 앞"을 고집하면 사이에 다른 요소가 끼었을 때 끝없이 다시 끼워 넣는다).
+    if (inline) {
+      const placed = host.parentElement === inline.parentElement
+        && Boolean(host.compareDocumentPosition(inline) & Node.DOCUMENT_POSITION_FOLLOWING);
+      if (!placed) inline.insertAdjacentElement("beforebegin", host);
+    }
     host.dataset.theme = isDarkPage() ? "dark" : "light";
     const shadow = host.shadowRoot;
     // 카드 수만 바뀐 경우(지연 렌더링·스크롤)에는 요약만 갈아 끼워 입력 중인 설정을 지키고,
@@ -692,13 +699,14 @@
       marks.setAttribute("role", "group");
       marks.setAttribute("aria-label", "강조");
       marks.append(el("span", "", "강조"));
-      for (const [key, label, color] of HIGHLIGHT_OPTIONS) {
+      for (const [key, label, color, colorEnd] of HIGHLIGHT_OPTIONS) {
         const button = el("button", "", label);
         button.type = "button";
         button.dataset.mark = key;
         button.dataset.label = label;
         button.dataset.focusKey = `mark:${key}`;
         button.style.setProperty("--mark", color);
+        button.style.setProperty("--mark-b", colorEnd);
         button.setAttribute("aria-pressed", String(prefs.highlight.includes(key)));
         button.title = "켜면 이 조건에 맞는 작품에 같은 색 테두리를 두릅니다";
         button.addEventListener("click", () => {
@@ -972,7 +980,7 @@
       .card.dim { opacity:.34; filter:grayscale(.6); }
       .card.dim:hover,.card.dim:focus-within { opacity:1; filter:none; }
       .card.reveal { opacity:.5; outline:1px dashed var(--muted); outline-offset:-1px; }
-      .card.marked { outline:2px solid var(--mark); outline-offset:-2px; border-radius:6px; }
+      .card.marked .cover-link::after { content:""; position:absolute; inset:0; border-radius:inherit; padding:3px; background:linear-gradient(135deg,var(--mark-a),var(--mark-b)); -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none; }
       .cover-link { position:relative; display:block; flex:none; width:var(--cover-w,120px); aspect-ratio:2 / 2.9; overflow:hidden; border-radius:4px; background:var(--soft); border:1px solid rgba(0,0,0,.08); }
       .cover-link img { width:100%; height:100%; object-fit:cover; display:block; }
       .stack { position:absolute; top:6px; left:6px; display:flex; flex-direction:column; align-items:flex-start; gap:3px; max-width:calc(100% - 12px); }
@@ -1023,7 +1031,9 @@
     const mark = decision.mode === "hide" ? null : cardHighlight(classified.statuses, prefs);
     if (mark) {
       card.classList.add("marked");
-      card.style.setProperty("--mark", HIGHLIGHT_OPTIONS.find(([key]) => key === mark)?.[2] ?? "#9333a8");
+      const option = HIGHLIGHT_OPTIONS.find(([key]) => key === mark);
+      card.style.setProperty("--mark-a", option?.[2] ?? "#9333a8");
+      card.style.setProperty("--mark-b", option?.[3] ?? "#f472b6");
     }
     const title = record.seriesTitle || record.title;
     const cover = el("a", "cover-link");
@@ -1248,7 +1258,9 @@
   }
 
   function scheduleRender() {
-    if (renderTimer) clearTimeout(renderTimer);
+    // 이미 예약돼 있으면 그대로 둔다. 요청이 올 때마다 다시 미루면, DOM 이 쉬지 않고 바뀌는 화면
+    // (자동으로 넘어가는 배너 등)에서는 영영 그려지지 않는다.
+    if (renderTimer) return;
     renderTimer = setTimeout(() => {
       renderTimer = null;
       if (lastUrl !== location.href) {
@@ -1292,7 +1304,18 @@
     if (area !== "local") return;
     if (changes[PAGE_INDEX_KEY] || changes[STORE_PREFS_KEY] || changes[IGNORED_BOOKS_KEY]) void loadStorage();
   });
-  new MutationObserver(scheduleRender).observe(document.documentElement, { childList: true, subtree: true });
+  /**
+   * RIDI 가 카드를 새로 그린 바로 그 순간(화면에 칠해지기 전)에 배지·숨김·강조를 정한다.
+   * 0.15초 뒤로 미루면 숨길 카드가 먼저 보였다가 사라지고, 목록이 그만큼 출렁인다.
+   */
+  new MutationObserver((mutations) => {
+    if (prefs.enabled && page()) {
+      const foreign = mutations.some((mutation) => [...mutation.addedNodes].some((node) =>
+        node.nodeType === Node.ELEMENT_NODE && !node.hasAttribute(HOST_ATTR) && !node.classList.contains(BADGE_CLASS)));
+      if (foreign) decorate();
+    }
+    scheduleRender();
+  }).observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener("popstate", scheduleRender);
   window.addEventListener("hashchange", scheduleRender);
   setInterval(() => {

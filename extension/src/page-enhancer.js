@@ -514,18 +514,57 @@
       history.replaceState(history.state, "", url.pathname + url.search + url.hash);
       window.dispatchEvent(new PopStateEvent("popstate", { state: history.state }));
     };
-    const anchor = nativeAnchor();
-    anchor?.setAttribute(BUSY_ATTR, "true");
+    // 다시 받는 동안의 중간 상태(2쪽 내용, 빈 목록, 배지 없는 카드)를 보여 주지 않는다.
+    // RIDI 는 다시 받을 때 목록 노드를 통째로 새로 만들기 때문에 목록 노드에 표시를 달면 같이 사라진다.
+    // 그래서 문서 뿌리에 상태를 달고, CSS 가 "도구 줄 뒤에 오는 것 전부"를 투명하게 한다.
+    const root = document.documentElement;
+    const container = document.getElementById(VIEW_ID)?.parentElement ?? null;
+    if (root.getAttribute(BUSY_ATTR) !== "out") {
+      // 목록이 잠깐 비어도 아래 내용이 딸려 올라오지 않게 지금 높이를 붙잡아 둔다.
+      if (container) container.style.minHeight = `${Math.round(container.getBoundingClientRect().height)}px`;
+      root.setAttribute(BUSY_ATTR, "out");
+    }
     clearTimeout(refetchTimer);
     const current = Number(new URL(location.href).searchParams.get("page") ?? 1) || 1;
     if (current !== 1) go(1);
     else go(2);
     refetchTimer = setTimeout(() => {
       if (current === 1) go(1);
-      setTimeout(() => {
-        for (const node of document.querySelectorAll(`[${BUSY_ATTR}]`)) node.removeAttribute(BUSY_ATTR);
-      }, 600);
+      settleNativeList(container);
     }, 80);
+  }
+
+  let settleToken = 0;
+  function settleNativeList(container) {
+    const token = ++settleToken;
+    let quiet = null;
+    let finished = false;
+    const finish = () => {
+      if (finished || token !== settleToken) return;
+      finished = true;
+      observer.disconnect();
+      clearTimeout(quiet);
+      // 새로 그려진 카드에 배지를 먼저 달고 나서 보여 준다.
+      const kind = pageKind();
+      if (kind && kind !== "detail") decorateCards(kind);
+      const root = document.documentElement;
+      root.setAttribute(BUSY_ATTR, "in");
+      if (container) container.style.minHeight = "";
+      setTimeout(() => {
+        if (root.getAttribute(BUSY_ATTR) === "in") root.removeAttribute(BUSY_ATTR);
+      }, 220);
+    };
+    // RIDI 가 목록을 고치는 동안에는 기다리고, 0.25초 동안 조용하면 끝난 것으로 본다.
+    const ours = (node) => node.nodeType !== Node.ELEMENT_NODE || String(node.id).startsWith("ridi-driller") || node.classList.contains(BADGE_CLASS);
+    const observer = new MutationObserver((mutations) => {
+      // 확장 자신이 넣고 뺀 것(배지 등)은 RIDI 가 아직 그리는 중이라는 신호가 아니다.
+      if (mutations.every((mutation) => [...mutation.addedNodes, ...mutation.removedNodes].every(ours))) return;
+      clearTimeout(quiet);
+      quiet = setTimeout(finish, 250);
+    });
+    observer.observe(container ?? document.body, { childList: true, subtree: true });
+    quiet = setTimeout(finish, 900);
+    setTimeout(finish, 3000);
   }
 
   /**
@@ -572,10 +611,14 @@
       section.append(el("div", "results"), el("div", "pagination-host"));
       shadow.append(style, section);
     }
+    // 원본 목록 앞, 같은 부모 안에만 있으면 된다. "바로 앞"을 고집하면 다른 요소가 사이에 끼었을 때
+    // 서로 자리를 뺏으며 끝없이 다시 끼워 넣게 된다 (화면이 계속 떨린다).
     const anchor = nativeAnchor();
     if (anchor) {
-      if (host.nextElementSibling !== anchor) anchor.insertAdjacentElement("beforebegin", host);
-    } else if (stripHost.nextElementSibling !== host) {
+      const placed = host.parentElement === anchor.parentElement
+        && Boolean(host.compareDocumentPosition(anchor) & Node.DOCUMENT_POSITION_FOLLOWING);
+      if (!placed) anchor.insertAdjacentElement("beforebegin", host);
+    } else if (!host.isConnected) {
       stripHost.insertAdjacentElement("afterend", host);
     }
     return host;
@@ -684,7 +727,9 @@
     const mark = kind === "releases" ? cardHighlight(record.statuses ?? [], storePrefs) : null;
     if (mark) {
       tile.classList.add("marked");
-      tile.style.setProperty("--mark", HIGHLIGHT_OPTIONS.find(([key]) => key === mark)?.[2] ?? "#9333a8");
+      const option = HIGHLIGHT_OPTIONS.find(([key]) => key === mark);
+      tile.style.setProperty("--mark-a", option?.[2] ?? "#9333a8");
+      tile.style.setProperty("--mark-b", option?.[3] ?? "#f472b6");
     }
     if (stack.childElementCount > 0) cover.append(stack);
     if (pill) cover.append(el("span", "pill", pill));
@@ -795,6 +840,9 @@
       directionButton.textContent = prefs.sortDir === "asc" ? "오름차순" : "내림차순";
       directionButton.disabled = prefs.sort === "default";
     }
+    // 조건이 없을 때는 버튼을 숨기지 않고 비활성으로 둔다 (필터를 걸 때 도구 줄이 밀리지 않게).
+    const resetButton = shadow.querySelector(".reset-filters");
+    if (resetButton) resetButton.disabled = !active;
 
     const status = shadow.querySelector(".sync-status");
     if (status) {
@@ -816,7 +864,9 @@
     }
 
     const conditions = shadow.querySelector(".conditions");
-    if (conditions) {
+    if (conditions && conditions.dataset.query !== prefs.query) {
+      // 검색어가 그대로면 다시 만들지 않는다 (화면이 바뀔 때마다 지웠다 그리면 깜빡인다).
+      conditions.dataset.query = prefs.query;
       const terms = describeSearchQuery(parseSearchQuery(prefs.query));
       conditions.replaceChildren();
       conditions.hidden = terms.length === 0;
@@ -839,18 +889,31 @@
       }
     }
 
-    results.replaceChildren();
     results.classList.toggle("grid", view.type === "books");
-    listObserver?.disconnect();
-    listObserver = null;
     if (!showResults) {
       // 원본 목록이 보이는 동안에는 확장 목록을 그리지 않는다 (같은 책이 두 번 보이지 않게).
+      listObserver?.disconnect();
+      listObserver = null;
+      if (resultsHost.dataset.renderKey) {
+        delete resultsHost.dataset.renderKey;
+        results.replaceChildren();
+      }
       paginationHost.replaceChildren();
       return;
     }
     // 쪽 번호 대신 "더 보기"·무한 스크롤을 고르면 앞쪽부터 지금 쪽까지 이어서 보여 준다.
     const cumulative = prefs.paging !== "pages";
     const shownRows = cumulative ? filtered.slice(0, pagination.page * pagination.pageSize) : pagination.rows;
+    // 이 화면은 RIDI 가 DOM 을 바꿀 때마다 다시 계산된다. 보여 줄 내용이 같으면 칸을 지웠다 다시 만들지 않는다.
+    const renderKey = JSON.stringify([
+      kind, view.generatedAt, prefs, filtered.length, shownRows.map((record) => record.key ?? record.bId).join(","),
+      tileLook, storePrefs.highlight, shownRows.length === 0 ? progressMessage : "",
+    ]);
+    if (resultsHost.dataset.renderKey === renderKey && results.childElementCount > 0) return;
+    resultsHost.dataset.renderKey = renderKey;
+    listObserver?.disconnect();
+    listObserver = null;
+    results.replaceChildren();
     if (pagination.rows.length === 0) {
       // 결과가 없을 때는 무엇을 걸었는지(위 조건 줄)와 되돌리는 방법을 함께 보여 준다.
       const empty = el("div", "empty");
@@ -1063,7 +1126,8 @@
       .results.grid .empty { flex:1 1 100%; }
       .tile { flex:none; width:var(--card-w,160px); min-width:0; min-height:var(--card-h,0px); padding:var(--cover-top,0px) var(--cover-left,0px) 6px; }
       .tile-cover { position:relative; display:block; width:var(--cover-w,100%); height:var(--cover-h,auto); overflow:hidden; border-radius:2px; background:var(--soft); border:1px solid rgba(0,0,0,.1); }
-      .tile.marked .tile-cover { outline:2px solid var(--mark); outline-offset:2px; }
+      /* 강조: 표지 안쪽에 그라데이션 테두리. 표지 밖으로 나가지 않으므로 옆 칸과 붙지 않는다. */
+      .tile.marked .tile-cover::after { content:""; position:absolute; inset:0; z-index:1; border-radius:inherit; padding:3px; background:linear-gradient(135deg,var(--mark-a),var(--mark-b)); -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none; }
       .tile-cover img { display:block; width:100%; height:100%; object-fit:cover; }
       .stack { position:absolute; top:6px; left:6px; display:flex; flex-direction:column; align-items:flex-start; gap:3px; max-width:calc(100% - 12px); }
       .cover-badge { display:inline-flex; align-items:center; gap:4px; max-width:100%; overflow:hidden; border-radius:3px; padding:2px 6px 2px 5px; background:rgba(20,20,20,.78); color:#fff; font-size:10.5px; font-weight:600; line-height:1.3; white-space:nowrap; }
@@ -1324,7 +1388,7 @@
     sort.title = "전체 목록을 이 기준으로 다시 정렬합니다";
     const sortBox = dropdown("정렬", sort, (value) => value === defaultSort(kind));
     controls.append(sortBox);
-    const direction = el("button", "sort-direction active-only", "내림차순");
+    const direction = el("button", "sort-direction", "내림차순");
     direction.type = "button";
     direction.title = "정렬 방향 바꾸기";
     direction.addEventListener("click", () => {
@@ -1425,7 +1489,7 @@
     paging.classList.add("active-only", "own-paging");
     controls.append(paging);
     if (view.type === "books") {
-      const exportCsv = el("button", "active-only", "CSV 저장");
+      const exportCsv = el("button", "", "CSV 저장");
       exportCsv.type = "button";
       exportCsv.title = "현재 검색·필터 조건의 전체 목록을 CSV 파일로 저장합니다";
       exportCsv.addEventListener("click", () => {
@@ -1465,7 +1529,7 @@
         });
         filters.append(button);
       }
-      const reset = el("button", "active-only", "필터 초기화");
+      const reset = el("button", "reset-filters", "필터 초기화");
       reset.type = "button";
       reset.addEventListener("click", () => {
         updatePrefs(kind, resetPatch(kind));
@@ -1753,6 +1817,12 @@
       return;
     }
     document.getElementById(DETAIL_ID)?.remove();
+    decorateCards(kind);
+    ensureIntegratedView(viewKind);
+  }
+
+  /** 원본 카드를 모아 배지를 단다. 바뀐 카드만 고치므로 자주 불러도 된다. */
+  function decorateCards(kind) {
     const cards = kind === "releases" ? collectReleaseCards() : collectLibraryCards(kind);
     currentCards = cards.map((card) => ({
       ...card,
@@ -1764,11 +1834,26 @@
     }));
     // 신간 화면의 표지 배지·숨김은 스토어 인핸서(store-enhancer.js)가 맡는다.
     if (kind !== "releases") for (const item of currentCards) renderNativeBadges(item);
-    ensureIntegratedView(viewKind);
+  }
+
+  /**
+   * RIDI 가 카드를 새로 그린 바로 그 순간(화면에 칠해지기 전)에 배지를 단다.
+   * 0.1초 뒤로 미루면 카드가 먼저 보였다가 배지가 나중에 튀어나온다.
+   */
+  function onMutations(mutations) {
+    const kind = pageKind();
+    if (kind && kind !== "detail") {
+      const foreign = mutations.some((mutation) => [...mutation.addedNodes].some((node) =>
+        node.nodeType === Node.ELEMENT_NODE && !node.classList.contains(BADGE_CLASS) && !String(node.id).startsWith("ridi-driller")));
+      if (foreign) decorateCards(kind);
+    }
+    scheduleRender();
   }
 
   function scheduleRender() {
-    if (renderTimer) clearTimeout(renderTimer);
+    // 이미 예약돼 있으면 그대로 둔다. 요청이 올 때마다 다시 미루면, DOM 이 쉬지 않고 바뀌는 화면
+    // (자동으로 넘어가는 배너 등)에서는 영영 그려지지 않는다.
+    if (renderTimer) return;
     renderTimer = setTimeout(() => {
       renderTimer = null;
       if (lastUrl !== urlKey()) {
@@ -1880,7 +1965,7 @@
     if (area !== "local") return;
     if (changes.ridi_store_prefs || changes.ridi_ignored_books || changes.ridi_library_units || changes.ridi_analysis || changes.ridi_page_index || changes.ridi_release_catalog || changes.ridi_shelf_catalog || changes.bookstore_libraries || changes.ridi_reading_notes) void loadStorage();
   });
-  new MutationObserver(scheduleRender).observe(document.documentElement, { childList: true, subtree: true });
+  new MutationObserver(onMutations).observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener("popstate", scheduleRender);
   window.addEventListener("hashchange", scheduleRender);
   setInterval(() => {
