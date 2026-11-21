@@ -36,9 +36,10 @@ export const DEFAULT_STORE_PREFS = Object.freeze({
 
 /** "강조": 켠 조건에 맞는 작품에 색 테두리를 두른다 (가리지 않고 눈에 띄게만 한다). */
 export const HIGHLIGHT_OPTIONS = [
-  ["sequel", "내 시리즈의 미구매 권", "#2563eb"],
-  ["authorNew", "구매 작가의 다른 작품", "#9333a8"],
-  ["interest", "관심", "#c0266d"],
+  // [키, 이름, 그라데이션 시작색, 끝색]
+  ["sequel", "내 시리즈의 미구매 권", "#2563eb", "#22d3ee"],
+  ["authorNew", "구매 작가의 다른 작품", "#9333a8", "#f472b6"],
+  ["interest", "관심", "#e11d74", "#fbbf24"],
 ];
 
 /**

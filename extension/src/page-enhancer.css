@@ -19,11 +19,26 @@ a:focus-within > .ridi-driller-store-badges {
 /* 서재·신간 화면에서 검색·필터를 쓰는 동안: 그 자리에 결과를 그리고 RIDI 원본 목록·쪽 번호는 가린다. */
 [data-ridi-driller-native="hidden"] { display: none !important; }
 
-/* RIDI 목록이 걸러진 결과를 다시 받는 짧은 동안. */
-[data-ridi-driller-busy] { opacity: 0.35 !important; pointer-events: none; transition: opacity 0.1s; }
+/* RIDI 목록이 걸러진 결과를 다시 받는 동안: 자리는 그대로 두고 투명하게 했다가 다 그려진 뒤 다시 보인다. */
+html[data-ridi-driller-busy] #ridi-driller-integrated-view ~ * { transition: opacity 0.16s ease !important; }
+html[data-ridi-driller-busy="out"] #ridi-driller-integrated-view ~ * { opacity: 0 !important; pointer-events: none; }
 
-/* 스토어 "강조": 켠 조건에 맞는 카드에 색 테두리 (막대의 버튼 점과 같은 색). */
-[data-ridi-driller-mark] { outline: 2px solid var(--ridi-driller-mark, #9333a8) !important; outline-offset: 3px; border-radius: 6px; }
-[data-ridi-driller-mark="sequel"] { --ridi-driller-mark: #2563eb; }
-[data-ridi-driller-mark="authorNew"] { --ridi-driller-mark: #9333a8; }
-[data-ridi-driller-mark="interest"] { --ridi-driller-mark: #c0266d; }
+/* 스토어 "강조": 켠 조건에 맞는 작품의 표지 안쪽에 그라데이션 테두리 (막대의 버튼 점과 같은 색).
+   표지 밖으로 나가지 않으므로 옆 작품의 테두리와 붙지 않는다. */
+[data-ridi-driller-mark] { --ridi-driller-a: #9333a8; --ridi-driller-b: #f472b6; }
+[data-ridi-driller-mark="sequel"] { --ridi-driller-a: #2563eb; --ridi-driller-b: #22d3ee; }
+[data-ridi-driller-mark="authorNew"] { --ridi-driller-a: #9333a8; --ridi-driller-b: #f472b6; }
+[data-ridi-driller-mark="interest"] { --ridi-driller-a: #e11d74; --ridi-driller-b: #fbbf24; }
+[data-ridi-driller-mark]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  border-radius: 4px;
+  padding: 3px;
+  background: linear-gradient(135deg, var(--ridi-driller-a), var(--ridi-driller-b));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
