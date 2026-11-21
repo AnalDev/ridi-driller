@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "북드릴",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "description": "책덕후용 비공식 RIDI 플러그인. 서재를 분석해 소장·미구매·읽기 상태와 별점을 표시하고, 서재와 스토어 목록을 검색·필터·정렬합니다.",
   "permissions": ["activeTab", "cookies", "scripting", "storage"],
   "host_permissions": ["*://ridibooks.com/*", "*://*.ridibooks.com/*"],
