@@ -36,8 +36,8 @@ export const DEFAULT_STORE_PREFS = Object.freeze({
 
 /** "강조": 켠 조건에 맞는 작품에 색 테두리를 두른다 (가리지 않고 눈에 띄게만 한다). */
 export const HIGHLIGHT_OPTIONS = [
-  ["sequel", "구매한 시리즈의 새 권·미구매 권", "#2563eb"],
-  ["authorNew", "구매 작가", "#9333a8"],
+  ["sequel", "내 시리즈의 미구매 권", "#2563eb"],
+  ["authorNew", "구매 작가의 다른 작품", "#9333a8"],
   ["interest", "관심", "#c0266d"],
 ];
 
@@ -557,6 +557,29 @@ const BADGE_TONES = {
 };
 
 /**
+ * 읽기 상태 배지. 서재·스토어·확장 목록이 모두 이 함수 하나로 같은 말을 쓴다.
+ * RIDI 는 시리즈별 "가장 최근에 연 권"만 주므로 "N권까지 읽음"이 아니라 "최근 연 권 N"으로만 적는다.
+ * @param {any} record 서재 색인의 작품 기록
+ * @returns {{ key: string, label: string, title: string } | null}
+ */
+export function readingBadge(record) {
+  switch (record?.readingState) {
+    case "neverOpened":
+      return { key: "unread", label: "안 읽음", title: "소장했지만 한 번도 열지 않았습니다" };
+    case "inProgress":
+      return { key: "unread", label: "읽는 중", title: record.lastReadVolume ? `최근 연 권 ${record.lastReadVolume}` : "읽던 작품" };
+    case "ownedComplete":
+      return { key: "finished", label: "보유분 완독", title: "소장한 권은 마지막 권까지 열었습니다" };
+    case "caughtUp":
+      return { key: "finished", label: "완독", title: "현재 발매분까지 읽은 작품" };
+    case "finished":
+      return { key: "finished", label: "완독", title: "완결까지 읽은 작품" };
+    default:
+      return null;
+  }
+}
+
+/**
  * 표지 위에 올릴 배지. 소장 권수처럼 색인에 있는 값만 문구에 넣는다.
  * @param {{ statuses?: string[], record?: any, related?: any, purchasedAuthors?: Array<{ name: string, by: string }>, liveTotal?: number | null }} classified
  * @param {number} [limit]
@@ -586,22 +609,10 @@ export function storeBadges({ statuses = [], record = null, related = null, purc
     });
   }
   if (keys.has("interestUpdate")) badges.push({ key: "interestUpdate", label: "새 이야기", title: "관심 작품에 새 이야기가 있습니다" });
-  // 읽기 상태는 연결된 서재 기록이 있으면 그 값을 쓴다. RIDI 는 시리즈별 "가장 최근에 연 권"만 주므로
-  // "N권까지 읽음"이 아니라 "최근 연 권 N"으로만 적는다.
-  const reading = record?.readingState;
-  if (isOwned && reading === "neverOpened") {
-    badges.push({ key: "unread", label: "안 읽음", title: "소장했지만 한 번도 열지 않았습니다" });
-  } else if (isOwned && reading === "inProgress") {
-    badges.push({ key: "unread", label: "읽는 중", title: record.lastReadVolume ? `최근 연 권 ${record.lastReadVolume}` : "읽던 작품" });
-  } else if (isOwned && reading === "ownedComplete") {
-    badges.push({ key: "finished", label: "보유분 완독", title: "소장한 권은 마지막 권까지 열었습니다" });
-  } else if (isOwned && (reading === "caughtUp" || reading === "finished")) {
-    badges.push({ key: "finished", label: "완독", title: reading === "finished" ? "완결까지 읽은 작품" : "현재 발매분까지 읽은 작품" });
-  } else if (isOwned && !reading && keys.has("unread")) {
-    badges.push({ key: "unread", label: "안 읽음", title: "소장했지만 아직 다 읽지 않았습니다" });
-  } else if (!reading && keys.has("finished")) {
-    badges.push({ key: "finished", label: "완독", title: "끝까지 읽은 작품" });
-  }
+  const reading = isOwned ? readingBadge(record) : null;
+  if (reading) badges.push(reading);
+  else if (isOwned && !record?.readingState && keys.has("unread")) badges.push({ key: "unread", label: "안 읽음", title: "소장했지만 아직 다 읽지 않았습니다" });
+  else if (!record?.readingState && keys.has("finished")) badges.push({ key: "finished", label: "완독", title: "끝까지 읽은 작품" });
   if (keys.has("interest")) badges.push({ key: "interest", label: "관심", title: "관심 작품" });
   if (keys.has("otherEdition")) {
     badges.push({

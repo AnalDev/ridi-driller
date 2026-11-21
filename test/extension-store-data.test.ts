@@ -19,6 +19,7 @@ import {
   parseCardFacts,
   parseNextData,
   priceLines,
+  readingBadge,
   removeIgnored,
   sortStoreBooks,
   storeBadges,
@@ -323,6 +324,18 @@ describe("reading-state badges", () => {
     expect(badgeFor("ownedComplete")).toEqual(["보유분 완독|소장한 권은 마지막 권까지 열었습니다"]);
     expect(badgeFor("caughtUp")).toEqual(["완독|현재 발매분까지 읽은 작품"]);
     expect(badgeFor("finished")).toEqual(["완독|완결까지 읽은 작품"]);
+  });
+});
+
+describe("one reading-state wording for every screen", () => {
+  it("is the single source for library covers, store covers and extension lists", () => {
+    expect(readingBadge({ readingState: "neverOpened" })).toMatchObject({ key: "unread", label: "안 읽음" });
+    expect(readingBadge({ readingState: "inProgress", lastReadVolume: 3 })).toMatchObject({ key: "unread", label: "읽는 중", title: "최근 연 권 3" });
+    // 보유분을 다 읽은 시리즈를 "안 읽음"이라고 하지 않는다
+    expect(readingBadge({ readingState: "ownedComplete" })).toMatchObject({ key: "finished", label: "보유분 완독" });
+    expect(readingBadge({ readingState: "finished" })?.label).toBe("완독");
+    expect(readingBadge(null)).toBeNull();
+    expect(readingBadge({})).toBeNull();
   });
 });
 

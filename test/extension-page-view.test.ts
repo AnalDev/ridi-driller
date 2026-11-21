@@ -191,3 +191,23 @@ describe("filters restored from the original web app", () => {
     });
   });
 });
+
+describe("release rows share the store's ownership signals", () => {
+  const pageIndex = {
+    catalog: [{ bId: "10", seriesId: "10", title: "가진 시리즈", authors: ["홍길동"], authorIds: ["7"], ownedCount: 9, totalCount: 9, missingCount: 0, readingState: "ownedComplete" }],
+    owned: [{ bId: "10", title: "가진 시리즈", unitId: "u" }],
+    interest: [],
+    statuses: { newVolume: [], unread: [], finished: [], authorNew: [] },
+  };
+  const rows = buildIntegratedView({
+    kind: "releases",
+    pageIndex,
+    releaseCatalog: { generatedAt: 1, items: [{ bId: "19", seriesId: "10", title: "가진 시리즈", authors: [], genreIds: [1500], seriesTotal: 10 }] },
+  }).rows as Array<Record<string, unknown> & { statuses: string[] }>;
+
+  it("lets a new volume of an owned series match the missing-volume filter and carries the reading state", () => {
+    // 신간 API 의 권수(seriesTotal)는 이 레코드에 실려 오지 않으면 비교하지 않는다 → 분석 때의 값 그대로
+    expect(rows[0]).toMatchObject({ ownership: "owned", readingState: "ownedComplete", ownedCount: 9 });
+    expect(rows[0].statuses).toContain("ownedSeries");
+  });
+});

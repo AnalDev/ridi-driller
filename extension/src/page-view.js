@@ -66,7 +66,7 @@ function completeInterestRows(pageIndex) {
   });
 }
 
-const RELEASE_STATUS_KEYS = new Set(["owned", "ownedSeries", "newVolume", "unread", "finished", "authorNew", "interest", "interestUpdate"]);
+const RELEASE_STATUS_KEYS = new Set(["owned", "ownedSeries", "partial", "newVolume", "unread", "finished", "authorNew", "interest", "interestUpdate"]);
 
 function completeReleaseRows(pageIndex, releaseCatalog) {
   // 스토어 카드와 같은 연결 규칙을 쓴다: 책 ID → 시리즈 ID → 제목, 작가는 작가 ID 우선.
@@ -75,14 +75,22 @@ function completeReleaseRows(pageIndex, releaseCatalog) {
   return (releaseCatalog?.items ?? []).map((record) => {
     const authors = (record.authorRefs ?? (record.authors ?? []).map((name) => ({ id: null, name })))
       .map((author) => ({ ...author, role: "author" }));
-    const statuses = lookup.classify({ bId: record.bId, seriesId: record.seriesId, title: record.title, authors })
-      .statuses.filter((key) => RELEASE_STATUS_KEYS.has(key));
+    const classified = lookup.classify({ bId: record.bId, seriesId: record.seriesId, title: record.title, authors });
+    const statuses = classified.statuses.filter((key) => RELEASE_STATUS_KEYS.has(key));
+    // 스토어 화면과 같은 기준: 소장 중인 시리즈에 사지 않은 권이 있으면 "미구매 권" 필터에도 걸리게 한다.
+    if (statuses.includes("partial") && !statuses.includes("newVolume")) statuses.push("newVolume");
     const owned = statuses.includes("owned") || statuses.includes("ownedSeries");
     return {
       ...record,
       key: `release:${record.bId}`,
       ownership: owned ? "owned" : "unowned",
       statuses,
+      // 표지 배지가 스토어와 같은 말을 쓰도록 연결된 서재 기록의 값을 함께 준다.
+      readingState: classified.record?.readingState ?? null,
+      lastReadVolume: classified.record?.lastReadVolume ?? null,
+      ownedCount: classified.record?.ownedCount ?? null,
+      totalCount: classified.record ? Math.max(Number(classified.record.totalCount ?? 0), Number(classified.liveTotal ?? 0)) : null,
+      missingCount: classified.record ? (classified.liveTotal ? Math.max(0, classified.liveTotal - Number(classified.record.ownedCount ?? 0)) : classified.record.missingCount ?? 0) : null,
     };
   });
 }

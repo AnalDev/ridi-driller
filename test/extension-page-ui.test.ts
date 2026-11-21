@@ -96,6 +96,18 @@ describe("RIDI inline page tools", () => {
     expect(source).not.toContain("link.style.fontWeight");
   });
 
+  it("uses the same wording, reading-state rule, hide list and highlight on every screen", () => {
+    // 읽기 상태: 서재 표지·확장 목록·스토어 표지가 모두 readingBadge() 를 쓴다
+    expect(source).toContain("const reading = readingBadge(record);");
+    expect(storeSource).not.toContain('"neverOpened"');
+    // 같은 개념은 같은 말
+    expect(source).toContain('["unread", "안 읽음"]');
+    expect(source).toContain('"내 시리즈의 미구매 권"');
+    // 스토어의 숨김 목록·차단어·강조가 신간·작가 탭 목록에도 적용된다
+    expect(source).toContain("isIgnored(ignoredBooks, { bId: record.bId, seriesId: record.seriesId, title: record.title })");
+    expect(source).toContain('const mark = kind === "releases" ? cardHighlight(record.statuses ?? [], storePrefs) : null;');
+  });
+
   it("leaves out states that are true for the whole screen and says each fact once", () => {
     expect(source).toContain('interest: ["interest"],');
     expect(source).toContain('purchases: ["owned", "ownedSeries"],');

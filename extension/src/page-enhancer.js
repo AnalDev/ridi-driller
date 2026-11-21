@@ -4,7 +4,6 @@
     createPageLookup,
     detectPageKind,
     normalizeBookTitle,
-    selectBadgeStatuses,
   } = await import(chrome.runtime.getURL("src/page-index.js"));
   const {
     PAGE_SIZE_OPTIONS,
@@ -23,7 +22,12 @@
   } = await import(chrome.runtime.getURL("src/search-query.js"));
   const {
     countReadingNotes,
+    cardHighlight,
     extractDetailMeta,
+    HIGHLIGHT_OPTIONS,
+    isIgnored,
+    normalizeStorePrefs,
+    readingBadge,
     findStorePurchases,
   } = await import(chrome.runtime.getURL("src/store-data.js"));
 
@@ -54,8 +58,8 @@
     ["attention", "미구매 또는 미독"],
     ["owned", "소장"],
     ["unowned", "미구매"],
-    ["newVolume", "내 서재 신권"],
-    ["unread", "아직 안 읽음"],
+    ["newVolume", "미구매 권 있음"],
+    ["unread", "안 읽음"],
     ["finished", "완독"],
     ["interest", "관심"],
     ["interestUpdate", "새 이야기"],
@@ -85,6 +89,9 @@
   let analysis = null;
   let pageIndex = null;
   let unitById = new Map();
+  // 스토어 화면의 설정(강조·차단어)과 숨김 목록. 확장이 그리는 미구매 작품 목록에도 똑같이 적용한다.
+  let storePrefs = normalizeStorePrefs(null);
+  let ignoredBooks = {};
   let catalogByTitle = new Map();
   let refetchTimer = null;
   let listObserver = null;
@@ -230,13 +237,37 @@
     return status.record?.reason || STATUS_META[status.key]?.label || status.key;
   }
 
+  /**
+   * 서재 표지(RIDI 원본 카드)에 올릴 배지. 스토어 표지와 같은 말·같은 판정을 쓴다:
+   * 미구매 권수는 서재 기록의 값으로, 읽기 상태는 readingBadge() 로.
+   * 그 화면 전체에 해당하는 상태(구매 목록의 소장, 관심 작품의 관심)는 뺀다.
+   */
+  function libraryBadges(item, record) {
+    const badges = [];
+    const keys = new Set(informative(item.statuses, item.pageKind).map((status) => status.key));
+    const missing = Number(record?.missingCount ?? 0);
+    if (missing > 0) badges.push({ key: "newVolume", label: `미구매 ${missing}권`, title: `소장 ${record.ownedCount}/${record.totalCount}권` });
+    else if (!record && keys.has("newVolume")) badges.push({ key: "newVolume", label: STATUS_META.newVolume.label, title: "소장 중인 시리즈에 아직 사지 않은 권이 있습니다" });
+    const reading = readingBadge(record);
+    if (reading) badges.push(reading);
+    else if (!record && keys.has("unread")) badges.push({ key: "unread", label: STATUS_META.unread.label, title: "아직 다 읽지 않았습니다" });
+    else if (!record && keys.has("finished")) badges.push({ key: "finished", label: STATUS_META.finished.label, title: "끝까지 읽은 작품" });
+    for (const status of item.statuses) {
+      if (status.key === "interestUpdate" && keys.has("interestUpdate")) badges.push({ key: "interestUpdate", label: STATUS_META.interestUpdate.label, title: statusTitle(status) });
+    }
+    if (keys.has("interest") && !keys.has("interestUpdate")) badges.push({ key: "interest", label: STATUS_META.interest.label, title: "관심 작품" });
+    if (keys.has("owned") || keys.has("ownedSeries")) badges.unshift({ key: "owned", label: STATUS_META.owned.label, title: "내 서재에 있는 작품" });
+    return badges.slice(0, 2);
+  }
+
   function renderNativeBadges(item) {
     // 구매 목록·책장의 책은 전부 소장작이다. "소장" 배지로 표지를 덮지 않고 상태만 두 개까지 보여 준다.
-    const badges = selectBadgeStatuses(informative(item.statuses, item.pageKind), item.pageKind, LIBRARY_KINDS.includes(item.pageKind) ? 2 : 3);
+    const linked = catalogByTitle.get(normalizeBookTitle(item.title)) ?? null;
+    const badges = libraryBadges(item, linked);
     // 서재 분석이 저장해 둔 별점 (서재 표지에는 RIDI 가 별점을 보여 주지 않는다).
-    const rating = Number(catalogByTitle.get(normalizeBookTitle(item.title))?.rating);
+    const rating = Number(linked?.rating);
     const ratingText = rating > 0 ? `★ ${rating.toFixed(1)}` : "";
-    const signature = `${badges.map((status) => `${status.key}:${statusTitle(status)}`).join("|")}#${ratingText}`;
+    const signature = `${badges.map((badge) => `${badge.key}:${badge.label}`).join("|")}#${ratingText}`;
     const currentBadge = item.badgeAnchor?.querySelector(`:scope > .${BADGE_CLASS}`);
     if (item.card.dataset.ridiDrillerBadges === signature && ((badges.length === 0 && !ratingText) || currentBadge)) return;
     item.card.dataset.ridiDrillerBadges = signature;
@@ -256,10 +287,10 @@
       .badge.rating::before { display:none; }
     `;
     const stack = el("span", "stack");
-    for (const status of badges) {
-      const badge = el("span", "badge", STATUS_META[status.key]?.label || status.key);
-      badge.style.setProperty("--dot", STATUS_META[status.key]?.dot || "#9aa3ad");
-      badge.title = statusTitle(status);
+    for (const item of badges) {
+      const badge = el("span", "badge", item.label);
+      badge.style.setProperty("--dot", STATUS_META[item.key]?.dot || "#9aa3ad");
+      badge.title = item.title;
       stack.append(badge);
     }
     if (ratingText) stack.append(el("span", "badge rating", ratingText));
@@ -335,7 +366,7 @@
   }
 
   function integratedView(kind) {
-    return buildIntegratedView({
+    const view = buildIntegratedView({
       kind,
       pageIndex,
       releaseCatalog,
@@ -343,6 +374,16 @@
       analysis,
       pathname: location.pathname,
     });
+    if (kind !== "releases" && kind !== "authorNew") return view;
+    // 스토어에서 숨긴 작품과 차단어는 신간·작가 탭 목록에서도 빠진다 (화면마다 다르게 보이지 않게).
+    const words = storePrefs.enabled ? storePrefs.blockWords.map((word) => word.toLowerCase()) : [];
+    const rows = view.rows.filter((record) => {
+      if (storePrefs.enabled && isIgnored(ignoredBooks, { bId: record.bId, seriesId: record.seriesId, title: record.title })) return false;
+      if (words.length === 0) return true;
+      const haystack = [record.title, record.publisher, ...(record.authors ?? [])].filter(Boolean).join(" ").toLowerCase();
+      return !words.some((word) => haystack.includes(word));
+    });
+    return { ...view, rows };
   }
 
   function outsideSiblingLayout(node) {
@@ -616,14 +657,30 @@
     const pill = ownershipPill(record);
     const stack = el("span", "stack");
     // 미구매 권수는 알약이 말하므로 배지에서는 뺀다. 그 화면 전체에 해당하는 상태도 뺀다.
-    const keys = informative(record.statuses ?? [], kind).filter((key) => !(pill && key === "newVolume") && key !== "ownedSeries");
-    for (const key of keys.slice(0, 2)) {
-      const meta = STATUS_META[key];
-      if (!meta) continue;
-      const label = key === "interestUpdate" ? `새 이야기 ${record.newReleaseCount ?? ""}`.trim() : meta.label;
-      const badge = el("span", "cover-badge", label);
-      badge.style.setProperty("--dot", meta.dot);
+    const reading = readingBadge(record);
+    const keys = informative(record.statuses ?? [], kind)
+      .filter((key) => !(pill && key === "newVolume") && key !== "ownedSeries" && key !== "partial")
+      // 읽기 상태는 서재 기록이 있으면 스토어 표지와 같은 판정(readingBadge)을 쓴다.
+      .filter((key) => !(reading && (key === "unread" || key === "finished")));
+    const chips = [
+      ...(reading ? [{ label: reading.label, dot: STATUS_META[reading.key].dot, title: reading.title }] : []),
+      ...keys.map((key) => (STATUS_META[key] ? {
+        label: key === "interestUpdate" ? `새 이야기 ${record.newReleaseCount ?? ""}`.trim() : key === "authorNew" ? "구매 작가" : STATUS_META[key].label,
+        dot: STATUS_META[key].dot,
+        title: STATUS_META[key].label,
+      } : null)).filter(Boolean),
+    ];
+    for (const chip of chips.slice(0, 2)) {
+      const badge = el("span", "cover-badge", chip.label);
+      badge.style.setProperty("--dot", chip.dot);
+      badge.title = chip.title;
       stack.append(badge);
+    }
+    // 강조: 스토어 화면에서 켠 조건(구매 작가·내 시리즈의 미구매 권·관심)을 신간 목록에도 같은 색으로 두른다.
+    const mark = kind === "releases" ? cardHighlight(record.statuses ?? [], storePrefs) : null;
+    if (mark) {
+      tile.classList.add("marked");
+      tile.style.setProperty("--mark", HIGHLIGHT_OPTIONS.find(([key]) => key === mark)?.[2] ?? "#9333a8");
     }
     if (stack.childElementCount > 0) cover.append(stack);
     if (pill) cover.append(el("span", "pill", pill));
@@ -930,6 +987,7 @@
       .results.grid .empty { flex:1 1 100%; }
       .tile { flex:none; width:var(--card-w,160px); min-width:0; min-height:var(--card-h,0px); padding:var(--cover-top,0px) var(--cover-left,0px) 6px; }
       .tile-cover { position:relative; display:block; width:var(--cover-w,100%); height:var(--cover-h,auto); overflow:hidden; border-radius:2px; background:var(--soft); border:1px solid rgba(0,0,0,.1); }
+      .tile.marked .tile-cover { outline:2px solid var(--mark); outline-offset:2px; }
       .tile-cover img { display:block; width:100%; height:100%; object-fit:cover; }
       .stack { position:absolute; top:6px; left:6px; display:flex; flex-direction:column; align-items:flex-start; gap:3px; max-width:calc(100% - 12px); }
       .cover-badge { display:inline-flex; align-items:center; gap:4px; max-width:100%; overflow:hidden; border-radius:3px; padding:2px 6px 2px 5px; background:rgba(20,20,20,.78); color:#fff; font-size:10.5px; font-weight:600; line-height:1.3; white-space:nowrap; }
@@ -1282,7 +1340,9 @@
         const count = view.rows.filter((record) => matchesStatus(record, key)).length;
         // 하나도 없거나 전부 해당하는 조건은 눌러도 달라지는 게 없다.
         if (count === 0 || (count === view.rows.length && !prefs.filters.includes(key))) continue;
-        const button = el("button", "", `${label} ${count.toLocaleString("ko-KR")}`);
+        // 신간 목록은 남의 작품이 섞여 있으므로 "내 시리즈의"를 붙여 스토어 화면과 같은 말을 쓴다.
+        const text = key === "newVolume" && kind === "releases" ? "내 시리즈의 미구매 권" : label;
+        const button = el("button", "", `${text} ${count.toLocaleString("ko-KR")}`);
         button.type = "button";
         button.dataset.filter = key;
         button.setAttribute("aria-pressed", String(prefs.filters.includes(key)));
@@ -1656,6 +1716,8 @@
       "ridi_shelf_catalog",
       "ridi_analysis",
       "ridi_library_units",
+      "ridi_store_prefs",
+      "ridi_ignored_books",
       "bookstore_libraries",
       "ridi_reading_notes",
       PREFS_KEY,
@@ -1664,6 +1726,8 @@
     releaseCatalog = stored.ridi_release_catalog ?? null;
     shelfCatalog = stored.ridi_shelf_catalog ?? null;
     analysis = stored.ridi_analysis ?? null;
+    storePrefs = normalizeStorePrefs(stored.ridi_store_prefs ?? null);
+    ignoredBooks = stored.ridi_ignored_books ?? {};
     unitById = new Map((stored.ridi_library_units ?? []).map((unit) => [String(unit.unit_id), unit]));
     catalogByTitle = new Map((stored.ridi_page_index?.catalog ?? []).map((record) => [normalizeBookTitle(record.title), record]));
     storeLibraries = stored.bookstore_libraries ?? {};
@@ -1704,7 +1768,7 @@
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
-    if (changes.ridi_library_units || changes.ridi_analysis || changes.ridi_page_index || changes.ridi_release_catalog || changes.ridi_shelf_catalog || changes.bookstore_libraries || changes.ridi_reading_notes) void loadStorage();
+    if (changes.ridi_store_prefs || changes.ridi_ignored_books || changes.ridi_library_units || changes.ridi_analysis || changes.ridi_page_index || changes.ridi_release_catalog || changes.ridi_shelf_catalog || changes.bookstore_libraries || changes.ridi_reading_notes) void loadStorage();
   });
   new MutationObserver(scheduleRender).observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener("popstate", scheduleRender);
