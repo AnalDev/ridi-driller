@@ -2,6 +2,28 @@ import { normalizeBookTitle } from "./page-index.js";
 import { createStoreLookup } from "./store-data.js";
 import { matchesSearchQuery, parseSearchQuery } from "./search-query.js";
 
+/** 별점 상태와 화면에 쓰는 말. */
+export const RATING_STATUS_LABELS = {
+  rated: "별점 있음",
+  none: "별점 없음",
+  failed: "불러오지 못함",
+  unchecked: "불러온 적 없음",
+};
+
+/** 상태 칸이 없는 예전 데이터는 값이 있으면 rated, 없으면 불러온 적 없음으로 본다. */
+export function ratingStatusOf(record) {
+  if (record?.ratingStatus) return record.ratingStatus;
+  return Number(record?.rating) > 0 ? "rated" : "unchecked";
+}
+
+/** 표지 아래에 적는 별점 문구. 값이 없을 때 왜 없는지를 구분해 적는다. */
+export function ratingText(record) {
+  const status = ratingStatusOf(record);
+  if (status === "rated") return `★ ${Number(record.rating).toFixed(1)}`;
+  if (status === "failed") return record?.ratingReason === "notFound" ? "별점 확인 불가" : "별점 불러오지 못함";
+  return status === "none" ? "별점 없음" : "별점 미확인";
+}
+
 export const PAGE_SIZE_OPTIONS = [24, 48, 96];
 /** 별점 드롭다운: 0(거르지 않음)과 3.0–5.0 을 0.1점 단위로. */
 export const RATING_STEPS = [0, ...Array.from({ length: 21 }, (_, index) => Math.round((3 + index * 0.1) * 10) / 10)];
@@ -187,7 +209,10 @@ export function filterIntegratedRows(rows, options = {}) {
     if (genreId && !(record.genreIds ?? []).includes(genreId)) return false;
     if (options.contentType && record.contentType !== options.contentType) return false;
     if (options.category && record.category !== options.category) return false;
-    if (options.tag && !(record.tags ?? []).includes(options.tag)) return false;
+    if (options.ratingStatus && ratingStatusOf(record) !== options.ratingStatus) return false;
+    // 태그는 여러 개를 고를 수 있고, 고른 것 중 하나라도 있으면 맞는 것으로 본다 (같은 항목 안에서는 OR).
+    const wantedTags = [...(Array.isArray(options.tags) ? options.tags : []), ...(options.tag ? [options.tag] : [])];
+    if (wantedTags.length > 0 && !wantedTags.some((tag) => (record.tags ?? []).includes(tag))) return false;
     // 성인·잡지 여부는 책 정보의 값 그대로. 값이 없는 예전 색인의 작품은 어느 쪽으로도 단정하지 않는다.
     if (options.adult === "only" && record.isAdult !== true) return false;
     if (options.adult === "exclude" && record.isAdult === true) return false;
@@ -231,7 +256,9 @@ export function integratedFacets(rows) {
   let adult = 0;
   let magazine = 0;
   let rated = 0;
+  const ratingStatuses = { rated: 0, none: 0, failed: 0, unchecked: 0 };
   for (const record of rows) {
+    ratingStatuses[ratingStatusOf(record)] = (ratingStatuses[ratingStatusOf(record)] ?? 0) + 1;
     if (record.contentType) contentTypes.set(record.contentType, (contentTypes.get(record.contentType) ?? 0) + 1);
     if (record.category) categories.set(record.category, (categories.get(record.category) ?? 0) + 1);
     for (const tag of record.tags ?? []) tags.set(tag, (tags.get(tag) ?? 0) + 1);
@@ -251,6 +278,7 @@ export function integratedFacets(rows) {
     adult,
     magazine,
     rated,
+    ratingStatuses,
   };
 }
 

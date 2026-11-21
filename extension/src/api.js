@@ -336,17 +336,33 @@ export async function searchBooks(keyword, size = 10) {
 export async function lookupRatings(probes, onProgress) {
   const out = new Map();
   await mapLimit(probes, 5, async (probe) => {
-    const books = await searchBooks(probe.title, 10);
+    const key = String(probe.seriesId || probe.bId);
+    let books;
+    try {
+      const res = await publicGet(`${SEARCH_API}/search?keyword=${encodeURIComponent(probe.title)}&where=book&what=base&size=10`);
+      books = res?.books ?? [];
+    } catch {
+      // 요청 자체가 실패 — "별점 없음"과 구분한다. 저장하지 않으므로 다음 분석에서 다시 시도된다.
+      out.set(key, { status: "failed", reason: "request", rating: null, count: null, tags: [] });
+      return;
+    }
     // 검색 결과에는 시리즈 ID 칸이 없고, 시리즈는 대표 책 ID(= 시리즈 ID)로 나온다.
     // 그래서 결과의 책 ID 가 이 작품의 시리즈 ID 나 책 ID 와 같은 것만 같은 작품으로 본다.
     const match = books.find((book) => String(book.b_id) === String(probe.seriesId ?? ""))
       ?? books.find((book) => String(book.b_id) === String(probe.bId));
-    const rating = Number(match?.buyer_rating_score);
-    const count = Number(match?.buyer_rating_count);
-    out.set(String(probe.seriesId || probe.bId), {
-      rating: match && rating > 0 ? rating : null,
-      count: match && count > 0 ? count : null,
-      tags: match ? (match.tags_info ?? []).map((tag) => tag.tag_name).filter(Boolean) : [],
+    if (!match) {
+      // 검색 결과에 이 작품이 없어 확인하지 못함 (판매 중지·제목 변경 등).
+      out.set(key, { status: "failed", reason: "notFound", rating: null, count: null, tags: [] });
+      return;
+    }
+    const rating = Number(match.buyer_rating_score);
+    const count = Number(match.buyer_rating_count);
+    out.set(key, {
+      // 작품은 확인됐지만 평가가 아직 없으면 "none".
+      status: rating > 0 ? "rated" : "none",
+      rating: rating > 0 ? rating : null,
+      count: count > 0 ? count : null,
+      tags: (match.tags_info ?? []).map((tag) => tag.tag_name).filter(Boolean),
     });
   }, onProgress);
   return out;
@@ -454,11 +470,16 @@ export function releaseRating(ratings) {
       count += votes;
       sum += stars * votes;
     }
-    return count > 0 ? { rating: Math.round((sum / count) * 10) / 10, count } : { rating: null, count: null };
+    // 별점 칸은 왔는데 평가가 0건 = 아직 별점 없음.
+    return count > 0
+      ? { status: "rated", rating: Math.round((sum / count) * 10) / 10, count }
+      : { status: "none", rating: null, count: null };
   }
   const score = Number(ratings?.buyer_rating?.score ?? ratings?.rating ?? 0);
   const count = Number(ratings?.buyer_rating?.count ?? 0);
-  return { rating: score > 0 ? score : null, count: count > 0 ? count : null };
+  if (score > 0) return { status: "rated", rating: score, count: count > 0 ? count : null };
+  // 별점 칸 자체가 없으면 확인한 적 없는 것으로 둔다.
+  return { status: ratings == null ? "unchecked" : "none", rating: null, count: null };
 }
 
 function releaseRecord(item, genre) {
@@ -489,6 +510,7 @@ function releaseRecord(item, genre) {
     isAdult: Boolean(book.adults_only),
     rating: releaseRating(book.ratings).rating,
     ratingCount: releaseRating(book.ratings).count,
+    ratingStatus: releaseRating(book.ratings).status,
   };
 }
 
@@ -508,6 +530,88 @@ async function fetchNewReleaseGenre(genre) {
     offset += items.length;
   }
   return records;
+}
+
+/** 별점이 없던 신간에 별점이 붙기를 기대해 볼 만한 기간. 이보다 오래된 "별점 없음"은 다시 확인하지 않는다. */
+export const RATING_RECHECK_DAYS = 60;
+
+/** 목록 항목의 별점 상태. 상태 칸이 없는 예전 데이터는 값이 있으면 rated, 없으면 확인한 적 없음으로 본다. */
+export function ratingStatusOf(item) {
+  if (item?.ratingStatus) return item.ratingStatus;
+  return Number(item?.rating) > 0 ? "rated" : "unchecked";
+}
+
+/**
+ * 별점을 다시 확인할 신간을 장르별로 모은다.
+ * - 불러오지 못한 것(failed)과 불러온 적 없는 것(unchecked)은 항상
+ * - 별점 없음(none)은 최근에 나온 것만 (오래된 작품은 계속 없을 가능성이 높다)
+ * @returns {Map<number, Set<string>>}
+ */
+export function unratedReleaseIdsByGenre(items, now = Date.now()) {
+  const pending = new Map();
+  const cutoff = now - RATING_RECHECK_DAYS * 24 * 60 * 60 * 1000;
+  for (const item of items ?? []) {
+    if (!item?.bId) continue;
+    const status = ratingStatusOf(item);
+    if (status === "rated") continue;
+    if (status === "none") {
+      const published = Date.parse(item.publishDate || "");
+      if (!(published >= cutoff)) continue;
+    }
+    for (const genreId of item.genreIds ?? []) {
+      if (!pending.has(genreId)) pending.set(genreId, new Set());
+      pending.get(genreId).add(String(item.bId));
+    }
+  }
+  return pending;
+}
+
+/** 새로 확인한 별점 상태만 목록에 합친다. 다른 칸은 건드리지 않는다. */
+export function applyReleaseRatings(items, found) {
+  let updated = 0;
+  const next = (items ?? []).map((item) => {
+    const fresh = found.get(String(item.bId));
+    if (!fresh) return item;
+    if (item.rating === fresh.rating && item.ratingCount === fresh.count && item.ratingStatus === fresh.status) return item;
+    if (fresh.status === "rated") updated += 1;
+    return { ...item, rating: fresh.rating, ratingCount: fresh.count, ratingStatus: fresh.status };
+  });
+  return { items: next, updated };
+}
+
+/**
+ * 고른 신간의 별점만 다시 확인한다.
+ * 신간 목록은 최신순이라 다시 확인할 작품은 대개 앞쪽에 있다. 장르마다 앞쪽부터 받다가
+ * 찾던 작품을 모두 만나면 거기서 멈춘다 (전체를 다시 받지 않는다).
+ * 요청이 실패한 장르의 작품은 "불러오지 못함"으로 표시한다.
+ * @param {Map<number, Set<string>>} pending
+ * @returns {Promise<Map<string, { status: string, rating: number | null, count: number | null }>>}
+ */
+export async function fetchReleaseRatings(pending, onProgress) {
+  const found = new Map();
+  const genres = [...pending.entries()].filter(([, ids]) => ids.size > 0);
+  await mapLimit(genres, 3, async ([genreId, ids]) => {
+    const waiting = new Set(ids);
+    let offset = 0;
+    for (let page = 0; page < 20 && waiting.size > 0; page += 1) {
+      let result;
+      try {
+        result = await publicGet(`${NEW_RELEASE_API}?category_includes=${genreId}&offset=${offset}&limit=200`);
+      } catch {
+        for (const bId of waiting) if (!found.has(bId)) found.set(bId, { status: "failed", rating: null, count: null });
+        break;
+      }
+      const items = result?.data?.items ?? [];
+      for (const item of items) {
+        const bId = String(item?.book?.book_id ?? "");
+        if (!waiting.delete(bId)) continue;
+        found.set(bId, releaseRating(item.book.ratings));
+      }
+      if (!result?.data?.pagination?.next_page || items.length === 0) break;
+      offset += items.length;
+    }
+  }, onProgress);
+  return found;
 }
 
 export async function fetchAllNewReleases(onProgress) {

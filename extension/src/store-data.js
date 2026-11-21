@@ -230,6 +230,8 @@ export function normalizeStoreBook(raw, badges = []) {
     categories: (Array.isArray(raw.categories) ? raw.categories : []).map((category) => text(category?.name)).filter(Boolean),
     isAdult: Boolean(raw.adultsOnly ?? raw.isAdultOnly ?? raw.property?.is_adult_only ?? false),
     ...ratingSummary(raw.ratings),
+    // 스토어 목록 데이터는 별점별 건수를 준다. 그 칸이 없는 출처(책 정보 API)는 확인한 적 없음.
+    ratingStatus: Array.isArray(raw.ratings) ? (ratingSummary(raw.ratings).rating != null ? "rated" : "none") : "unchecked",
     price: numberOrNull(purchase?.salePrice ?? purchase?.sellingPrice ?? purchase?.price),
     fullPrice: numberOrNull(purchase?.fullPrice ?? purchase?.regular_price),
     publishDate: typeof published === "string" && published ? published : null,

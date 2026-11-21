@@ -6,6 +6,8 @@ import {
   integratedRowsToCsv,
   paginateIntegratedRows,
   RATING_STEPS,
+  ratingStatusOf,
+  ratingText,
 } from "../extension/src/page-view.js";
 
 describe("RIDI integrated page view", () => {
@@ -209,5 +211,36 @@ describe("release rows share the store's ownership signals", () => {
     // 신간 API 의 권수(seriesTotal)는 이 레코드에 실려 오지 않으면 비교하지 않는다 → 분석 때의 값 그대로
     expect(rows[0]).toMatchObject({ ownership: "owned", readingState: "ownedComplete", ownedCount: 9 });
     expect(rows[0].statuses).toContain("ownedSeries");
+  });
+});
+
+describe("rating status", () => {
+  const rows = [
+    { key: "1", title: "가", rating: 4.8, ratingStatus: "rated", tags: ["이세계", "먼치킨"] },
+    { key: "2", title: "나", rating: null, ratingStatus: "none", tags: ["로맨스"] },
+    { key: "3", title: "다", rating: null, ratingStatus: "failed", ratingReason: "request", tags: ["먼치킨"] },
+    { key: "4", title: "라", rating: null, ratingStatus: "failed", ratingReason: "notFound" },
+    { key: "5", title: "마" },
+  ];
+
+  it("tells apart no rating, failed to load and never loaded", () => {
+    expect(rows.map(ratingStatusOf)).toEqual(["rated", "none", "failed", "failed", "unchecked"]);
+    expect(rows.map(ratingText)).toEqual(["★ 4.8", "별점 없음", "별점 불러오지 못함", "별점 확인 불가", "별점 미확인"]);
+    // 상태 칸이 없는 예전 데이터도 값이 있으면 rated
+    expect(ratingStatusOf({ rating: 4.1 })).toBe("rated");
+  });
+
+  it("filters by status and counts each one", () => {
+    const keys = (options: Record<string, unknown>) => filterIntegratedRows(rows, options).map((row: { key: string }) => row.key);
+    expect(keys({ ratingStatus: "failed" })).toEqual(["3", "4"]);
+    expect(keys({ ratingStatus: "unchecked" })).toEqual(["5"]);
+    expect(integratedFacets(rows).ratingStatuses).toEqual({ rated: 1, none: 1, failed: 2, unchecked: 1 });
+  });
+
+  it("matches any of several chosen tags", () => {
+    const keys = (options: Record<string, unknown>) => filterIntegratedRows(rows, options).map((row: { key: string }) => row.key);
+    expect(keys({ tags: ["먼치킨"] })).toEqual(["1", "3"]);
+    expect(keys({ tags: ["먼치킨", "로맨스"] })).toEqual(["1", "2", "3"]);
+    expect(keys({ tags: [] })).toHaveLength(5);
   });
 });

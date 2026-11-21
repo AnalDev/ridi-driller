@@ -93,6 +93,9 @@ export function buildCatalog({ units, meta, lastRead, ratings = null }) {
       isAdult: Boolean(book.property?.is_adult_only),
       isMagazine: Boolean(book.property?.is_magazine),
       rating: rated?.rating ?? null,
+      // rated 값 있음 · none 확인했지만 평가 없음 · failed 불러오지 못함 · unchecked 불러온 적 없음
+      ratingStatus: rated ? (rated.status ?? (rated.rating != null ? "rated" : "none")) : "unchecked",
+      ratingReason: rated?.reason ?? null,
       ratingCount: rated?.count ?? null,
       tags: rated?.tags ?? [],
       readingState: readingStateOf({

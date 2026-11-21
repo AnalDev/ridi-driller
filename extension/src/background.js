@@ -7,7 +7,11 @@ import {
   fetchAllUnits,
   fetchAuthorBooksMany,
   fetchBooksMeta,
+  applyReleaseRatings,
   fetchAllNewReleases,
+  fetchReleaseRatings,
+  ratingStatusOf,
+  unratedReleaseIdsByGenre,
   fetchAllShelves,
   fetchAllShelfUnits,
   fetchInterestBooks,
@@ -132,21 +136,27 @@ async function analyze({ withAuthors = true } = {}) {
       if (!book || book.property?.is_trial) continue;
       const key = String(book.series?.id ?? u.b_id);
       const known = storedRatings[key];
+      // 값이 있으면 그대로 쓴다. "별점 없음"·"검색에 없음"은 일정 기간 뒤에 다시 확인한다.
       if (known && (known.rating != null || started - Number(known.at ?? 0) < RATING_RETRY_MS)) continue;
       if (!probes.has(key)) {
         probes.set(key, { bId: String(u.b_id), seriesId: book.series?.id ? String(book.series.id) : null, title: String(book.series?.property?.title || book.title?.main || u.unit_title || "") });
       }
     }
     const ratingProbes = [...probes.values()].filter((probe) => probe.title);
+    const requestFailed = new Map();
     broadcast({ type: "progress", phase: "ratings", message: "별점·태그 확인 중…", done: 0, total: ratingProbes.length });
     if (ratingProbes.length > 0) {
       const found = await lookupRatings(ratingProbes, (done, total) =>
         broadcast({ type: "progress", phase: "ratings", message: `별점 ${done}/${total}`, done, total }),
       );
-      for (const [key, value] of found) storedRatings[key] = { ...value, at: started };
+      // 요청이 실패한 것은 저장하지 않는다 → 다음 분석에서 바로 다시 시도. 이번 서지에는 "불러오지 못함"으로 표시한다.
+      for (const [key, value] of found) {
+        if (value.status === "failed" && value.reason === "request") requestFailed.set(key, value);
+        else storedRatings[key] = { ...value, at: started };
+      }
       await chrome.storage.local.set({ [RATINGS_KEY]: storedRatings });
     }
-    const ratings = new Map(Object.entries(storedRatings));
+    const ratings = new Map([...Object.entries(storedRatings), ...requestFailed]);
 
     const recs = buildRecommendations({ units, meta, lastRead, authorBooks });
     const catalog = buildCatalog({ units, meta, lastRead, ratings });
@@ -226,6 +236,29 @@ async function syncReleaseCatalog({ force = false } = {}) {
   return releaseSyncPromise;
 }
 
+/** 신간 목록에서 별점이 아직 없는 작품의 별점만 다시 확인한다. 목록 전체의 유효 시간은 바꾸지 않는다. */
+let ratingRefreshPromise = null;
+async function refreshReleaseRatings() {
+  if (ratingRefreshPromise) return ratingRefreshPromise;
+  ratingRefreshPromise = (async () => {
+    const stored = (await chrome.storage.local.get(RELEASE_CATALOG_KEY))[RELEASE_CATALOG_KEY];
+    if (!stored?.items?.length) return { error: "신간 목록이 아직 없습니다. 전체 새로고침을 먼저 실행해 주세요." };
+    const pending = unratedReleaseIdsByGenre(stored.items);
+    if (pending.size === 0) return { updated: 0, checked: 0, none: stored.items.filter((item) => ratingStatusOf(item) === "none").length, failed: 0, unchecked: 0 };
+    const found = await fetchReleaseRatings(pending, (done, total) =>
+      broadcast({ type: "catalogProgress", catalog: "releases", message: `별점 확인 ${done}/${total}개 장르`, done, total }),
+    );
+    const { items, updated } = applyReleaseRatings(stored.items, found);
+    await chrome.storage.local.set({ [RELEASE_CATALOG_KEY]: { ...stored, items, ratingsCheckedAt: Date.now() } });
+    broadcast({ type: "catalogUpdated", catalog: "releases", count: items.length });
+    const count = (status) => items.filter((item) => ratingStatusOf(item) === status).length;
+    return { updated, checked: found.size, none: count("none"), failed: count("failed"), unchecked: count("unchecked") };
+  })().finally(() => {
+    ratingRefreshPromise = null;
+  });
+  return ratingRefreshPromise;
+}
+
 async function syncShelfCatalog({ uuid = null, force = false } = {}) {
   const syncKey = uuid || "shelves";
   const stored = await chrome.storage.local.get(SHELF_CATALOG_KEY);
@@ -280,6 +313,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         break;
       case "getReleaseCatalog":
         sendResponse((await chrome.storage.local.get(RELEASE_CATALOG_KEY))[RELEASE_CATALOG_KEY] ?? null);
+        break;
+      case "refreshReleaseRatings":
+        sendResponse(await refreshReleaseRatings());
         break;
       case "syncReleaseCatalog":
         sendResponse(await syncReleaseCatalog({ force: Boolean(msg.force) }));
