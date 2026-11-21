@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addIgnored,
+  cardHighlight,
   cardVisibility,
   countReadingNotes,
   createStoreLookup,
@@ -349,6 +350,44 @@ describe("show-only filters", () => {
     expect(cardVisibility({ statuses: [], book: {} }, prefs)).toEqual({ mode: "hide", reasons: ["focus"] });
     expect(cardVisibility({ statuses: ["ownedSeries", "partial"], book: { rating: 4.3 } }, prefs)).toEqual({ mode: "hide", reasons: ["rating"] });
     expect(cardVisibility({ statuses: ["ownedSeries", "partial"], book: { rating: 4.4 } }, prefs).mode).toBe("show");
+  });
+});
+
+describe("new volumes released after the last analysis", () => {
+  const lookup = createStoreLookup(pageIndex);
+
+  it("treats a fully owned series as having a new volume when the store reports more volumes now", () => {
+    const grown = lookup.classify({ bId: "109", seriesId: "100", title: "완전 소장 10권", seriesTotal: 10 });
+    expect(grown.statuses).toEqual(expect.arrayContaining(["ownedSeries", "partial"]));
+    expect(grown.liveTotal).toBe(10);
+    expect(storeBadges(grown)[0]).toMatchObject({ key: "partial", label: "소장 9/10" });
+    expect(storeBadges(grown)[0].title).toContain("미구매 1권");
+    expect(cardHighlight(grown.statuses, normalizeStorePrefs({}))).toBe("sequel");
+    // 살 책이 생겼으므로 "소장 숨김"에 걸리지 않는다
+    expect(cardVisibility({ statuses: grown.statuses, book: {} }, normalizeStorePrefs({ owned: "hide" })).mode).toBe("show");
+  });
+
+  it("does not compare volume counts for a same-total series or a title-only match", () => {
+    expect(lookup.classify({ bId: "105", seriesId: "100", title: "완전 소장 5권", seriesTotal: 9 }).statuses).not.toContain("partial");
+    expect(lookup.classify({ bId: "999", title: "완전 소장", seriesTotal: 50 }).liveTotal).toBeNull();
+  });
+});
+
+describe("highlighting", () => {
+  it("marks purchased-author works and unfinished own series by default, one mark per card", () => {
+    const prefs = normalizeStorePrefs({});
+    expect(prefs.highlight).toEqual(["sequel", "authorNew"]);
+    expect(cardHighlight(["authorNew"], prefs)).toBe("authorNew");
+    expect(cardHighlight(["ownedSeries", "partial"], prefs)).toBe("sequel");
+    expect(cardHighlight(["ownedSeries", "partial", "interest"], prefs)).toBe("sequel");
+    expect(cardHighlight(["interest"], prefs)).toBeNull();
+    expect(cardHighlight(["owned"], prefs)).toBeNull();
+  });
+
+  it("follows the chosen groups and switches off with the enhancer", () => {
+    expect(cardHighlight(["interest"], normalizeStorePrefs({ highlight: ["interest", "bogus"] }))).toBe("interest");
+    expect(cardHighlight(["authorNew"], normalizeStorePrefs({ highlight: [] }))).toBeNull();
+    expect(cardHighlight(["authorNew"], normalizeStorePrefs({ enabled: false }))).toBeNull();
   });
 });
 

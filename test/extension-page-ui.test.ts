@@ -161,7 +161,7 @@ describe("RIDI inline page tools", () => {
       expect(text).toContain("--accent-text:#0b6bcb");
     }
     expect(source).toContain('dropdown("정렬", sort,');
-    expect(storeSource).toContain('dropdown("별점", ratingSelect,');
+    expect(storeSource).toContain('dropdown("열 때 합쳐 보기", prefetchSelect,');
   });
 
   it("links other-store purchases and reading notes into the detail panel", () => {
@@ -225,10 +225,22 @@ describe("RIDI store enhancer", () => {
   });
 
   it("filters ratings in 0.1 steps and offers show-only groups", () => {
-    expect(storeSource).toContain("Math.round((3 + index * 0.1) * 10) / 10");
-    expect(storeSource).toContain('ratingSelect.className = "rating-select"');
+    expect(storeSource).toContain('ratingRange.step = "0.1";');
+    expect(storeSource).toContain('ratingRange.addEventListener("change", () => setPrefs({ minRating: ratingRange.value }));');
     expect(storeSource).toContain("for (const [key, label] of ONLY_FILTERS)");
     expect(storeSource).toContain("setPrefs({ only: [...next] })");
+  });
+
+  it("adds the rating to covers only where RIDI's own card shows none", () => {
+    expect(storeSource).toContain("parseCardFacts(item.card.textContent).rating == null && Number(book.rating) > 0");
+    expect(storeSource).toContain('el("span", "badge rating", ratingChip)');
+  });
+
+  it("highlights matching cards with a coloured outline without hiding anything", () => {
+    expect(storeSource).toContain('const MARK_ATTR = "data-ridi-driller-mark";');
+    expect(storeSource).toContain("cardHighlight(item.statuses, prefs)");
+    expect(styleSource).toContain('[data-ridi-driller-mark="authorNew"] { --ridi-driller-mark: #9333a8; }');
+    expect(storeSource).toContain("for (const [key, label, color] of HIGHLIGHT_OPTIONS)");
   });
 
   it("stores settings and the hide list locally only", () => {

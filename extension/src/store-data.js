@@ -27,11 +27,32 @@ export const DEFAULT_STORE_PREFS = Object.freeze({
   minReviews: 0,
   blockWords: [],
   only: [],
+  highlight: ["authorNew", "sequel"],
   autoLoad: false,
   prefetchPages: 0,
   moreSort: "source",
   collapsed: false,
 });
+
+/** "강조": 켠 조건에 맞는 작품에 색 테두리를 두른다 (가리지 않고 눈에 띄게만 한다). */
+export const HIGHLIGHT_OPTIONS = [
+  ["sequel", "구매한 시리즈의 새 권·미구매 권", "#2563eb"],
+  ["authorNew", "구매 작가", "#9333a8"],
+  ["interest", "관심", "#c0266d"],
+];
+
+/**
+ * 카드에 두를 강조. 여러 조건에 맞으면 위 목록의 순서(살 책이 남은 내 시리즈 → 구매 작가 → 관심)로 하나만 고른다.
+ * @param {string[]} statuses
+ * @param {any} prefs
+ * @returns {string | null}
+ */
+export function cardHighlight(statuses, prefs) {
+  if (!prefs?.enabled) return null;
+  const keys = new Set(statuses ?? []);
+  const matches = { sequel: keys.has("partial"), authorNew: keys.has("authorNew"), interest: keys.has("interest") };
+  return HIGHLIGHT_OPTIONS.map(([key]) => key).find((key) => (prefs.highlight ?? []).includes(key) && matches[key]) ?? null;
+}
 
 /** "골라 보기": 하나라도 켜면 그 조건 중 하나에 맞는 작품만 남긴다(합집합). */
 export const ONLY_FILTERS = [
@@ -65,6 +86,7 @@ export function normalizeStorePrefs(input) {
     minReviews: Math.floor(clampNumber(source.minReviews, 0, 1_000_000)),
     blockWords: [...new Set(words.map((word) => String(word).trim()).filter(Boolean))].slice(0, 50),
     only: ONLY_FILTERS.map(([key]) => key).filter((key) => (Array.isArray(source.only) ? source.only : []).includes(key)),
+    highlight: HIGHLIGHT_OPTIONS.map(([key]) => key).filter((key) => (Array.isArray(source.highlight) ? source.highlight : DEFAULT_STORE_PREFS.highlight).includes(key)),
     autoLoad: Boolean(source.autoLoad),
     prefetchPages: Math.floor(clampNumber(source.prefetchPages, 0, 4)),
     moreSort: MORE_SORT_OPTIONS.some(([key]) => key === source.moreSort) ? source.moreSort : "source",
@@ -390,14 +412,18 @@ export function createStoreLookup(pageIndex) {
       if (record && !keys.has("owned") && !keys.has("ownedSeries")) keys.add("ownedSeries");
       if (keys.has("owned")) keys.delete("ownedSeries");
       const isOwned = keys.has("owned") || keys.has("ownedSeries");
-      if (isOwned && (Number(record?.missingCount ?? 0) > 0 || keys.has("newVolume"))) keys.add("partial");
+      // 분석한 뒤에 시리즈가 더 길어졌으면(스토어가 알려 주는 지금 권수 > 분석 때 발매 권수) 내가 안 가진 새 권이 있다.
+      // 책·시리즈 ID 로 연결된 경우에만 비교한다 (제목만 같은 다른 판과 권수를 비교하지 않는다).
+      const liveTotal = numberOrNull(book?.seriesTotal);
+      const grew = Boolean(exact && liveTotal != null && Number(exact.totalCount) > 0 && liveTotal > Number(exact.totalCount));
+      if (isOwned && (Number(record?.missingCount ?? 0) > 0 || keys.has("newVolume") || grew)) keys.add("partial");
       if (conflicting && !isOwned) keys.add("otherEdition");
       // 분석이 미리 찾아 둔 "작가의 다른 작품" 목록(상위 작가만)에 없더라도,
       // 카드의 작가가 구매한 작품의 작가면 같은 표시를 단다. 같은 작품의 다른 판은 제외.
       const purchasedAuthors = isOwned || conflicting ? [] : purchasedAuthorsOf(book);
       if (purchasedAuthors.length > 0) keys.add("authorNew");
       if (isOwned) keys.delete("authorNew");
-      return { statuses: [...keys], record, related: conflicting ? byTitle : null, purchasedAuthors };
+      return { statuses: [...keys], record, related: conflicting ? byTitle : null, purchasedAuthors, liveTotal: grew ? liveTotal : null };
     },
   };
 }
@@ -532,22 +558,25 @@ const BADGE_TONES = {
 
 /**
  * 표지 위에 올릴 배지. 소장 권수처럼 색인에 있는 값만 문구에 넣는다.
- * @param {{ statuses?: string[], record?: any, related?: any, purchasedAuthors?: Array<{ name: string, by: string }> }} classified
+ * @param {{ statuses?: string[], record?: any, related?: any, purchasedAuthors?: Array<{ name: string, by: string }>, liveTotal?: number | null }} classified
  * @param {number} [limit]
  */
-export function storeBadges({ statuses = [], record = null, related = null, purchasedAuthors = [] }, limit = 3) {
+export function storeBadges({ statuses = [], record = null, related = null, purchasedAuthors = [], liveTotal = null }, limit = 3) {
   const keys = new Set(statuses);
   const badges = [];
   const owned = Number(record?.ownedCount ?? 0);
-  const total = Number(record?.totalCount ?? 0);
-  const missing = Number(record?.missingCount ?? 0);
+  // 스토어가 알려 준 지금 권수가 분석 때보다 많으면 그 값으로 센다 (분석 뒤에 나온 새 권).
+  const total = Math.max(Number(record?.totalCount ?? 0), Number(liveTotal ?? 0));
+  const missing = liveTotal ? Math.max(0, total - owned) : Number(record?.missingCount ?? 0);
   const isOwned = keys.has("owned") || keys.has("ownedSeries");
   // 소장 정보는 배지 하나로만 말한다: 다 가졌으면 "소장 9권", 일부만 가졌으면 "소장 2/8".
   if (isOwned && keys.has("partial")) {
     badges.push({
       key: "partial",
       label: total > 0 ? `소장 ${owned}/${total}` : "소장 · 미구매 권",
-      title: missing > 0 ? `소장 ${owned}/${total}권 · 미구매 ${missing}권` : "소장 중인 시리즈에 아직 사지 않은 권이 있습니다",
+      title: missing > 0
+        ? `소장 ${owned}/${total}권 · 미구매 ${missing}권${liveTotal ? " (서재 분석 뒤에 새 권이 나왔습니다)" : ""}`
+        : "소장 중인 시리즈에 아직 사지 않은 권이 있습니다",
     });
   } else if (isOwned) {
     badges.push({

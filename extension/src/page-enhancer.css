@@ -21,3 +21,9 @@ a:focus-within > .ridi-driller-store-badges {
 
 /* RIDI 목록이 걸러진 결과를 다시 받는 짧은 동안. */
 [data-ridi-driller-busy] { opacity: 0.35 !important; pointer-events: none; transition: opacity 0.1s; }
+
+/* 스토어 "강조": 켠 조건에 맞는 카드에 색 테두리 (막대의 버튼 점과 같은 색). */
+[data-ridi-driller-mark] { outline: 2px solid var(--ridi-driller-mark, #9333a8) !important; outline-offset: 3px; border-radius: 6px; }
+[data-ridi-driller-mark="sequel"] { --ridi-driller-mark: #2563eb; }
+[data-ridi-driller-mark="authorNew"] { --ridi-driller-mark: #9333a8; }
+[data-ridi-driller-mark="interest"] { --ridi-driller-mark: #c0266d; }

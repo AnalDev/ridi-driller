@@ -6,6 +6,8 @@
   const {
     DEFAULT_STORE_PREFS,
     HIDE_REASON_LABELS,
+    HIGHLIGHT_OPTIONS,
+    cardHighlight,
     IGNORED_BOOKS_KEY,
     ONLY_FILTERS,
     STORE_PREFS_KEY,
@@ -33,6 +35,7 @@
   const MORE_ID = "ridi-driller-store-more";
   const BADGE_CLASS = "ridi-driller-store-badges";
   const VIS_ATTR = "data-ridi-driller-vis";
+  const MARK_ATTR = "data-ridi-driller-mark";
   const HOST_ATTR = "data-ridi-driller-host";
   const PAGE_INDEX_KEY = "ridi_page_index";
   const MAX_AUTO_PAGES = 10;
@@ -250,6 +253,8 @@
       .stack { position:absolute; top:6px; left:6px; display:flex; flex-direction:column; align-items:flex-start; gap:3px; max-width:calc(100% - 12px); }
       .badge { display:inline-flex; align-items:center; gap:4px; max-width:100%; overflow:hidden; border-radius:3px; padding:2px 6px 2px 5px; background:rgba(20,20,20,.78); color:#fff; font-size:10.5px; font-weight:600; line-height:1.3; white-space:nowrap; }
       .badge::before { content:""; flex:none; width:6px; height:6px; border-radius:50%; background:var(--dot,#9aa3ad); }
+      .badge.rating { color:#ffd166; }
+      .badge.rating::before { display:none; }
       button { position:absolute; top:6px; right:6px; min-width:26px; height:24px; border:0; border-radius:4px; padding:0 6px; background:rgba(17,24,39,.82); color:#fff; font:inherit; cursor:pointer; opacity:var(--ridi-driller-hover,0); pointer-events:var(--ridi-driller-pointer,none); transition:opacity .12s; }
       button:hover,button:focus-visible { background:#111827; opacity:1; }
       button:focus-visible { outline:2px solid #fff; outline-offset:1px; pointer-events:auto; }
@@ -259,11 +264,12 @@
   function renderCardBadges(item) {
     const badges = prefs.enabled && prefs.badges ? item.badges : [];
     const showIgnore = prefs.enabled && !item.pageWork;
-    const signature = JSON.stringify([badges.map((badge) => [badge.key, badge.label]), showIgnore, item.ignored]);
+    const ratingChip = prefs.enabled && prefs.badges ? item.ratingChip : "";
+    const signature = JSON.stringify([badges.map((badge) => [badge.key, badge.label]), showIgnore, item.ignored, ratingChip]);
     const current = item.link.querySelector(`:scope > .${BADGE_CLASS}`);
     if (current?.dataset.signature === signature) return;
     current?.remove();
-    if (badges.length === 0 && !showIgnore) return;
+    if (badges.length === 0 && !showIgnore && !ratingChip) return;
 
     // RIDI 가 이미 위치를 잡아 둔 표지 링크(absolute 등)는 건드리지 않는다 — 덮어쓰면 카드 높이가 깨진다.
     if (getComputedStyle(item.link).position === "static") item.link.classList.add("ridi-driller-badge-anchor");
@@ -279,6 +285,11 @@
       node.style.setProperty("--dot", TONE_COLORS[badge.tone] ?? TONE_COLORS.gray);
       node.title = badge.title;
       stack.append(node);
+    }
+    if (ratingChip) {
+      const chip = el("span", "badge rating", ratingChip);
+      chip.title = "RIDI 구매자 별점";
+      stack.append(chip);
     }
     shadow.append(style, stack);
     if (showIgnore) {
@@ -311,6 +322,18 @@
     for (const [node, value] of marked) {
       if (node.getAttribute(VIS_ATTR) !== value) node.setAttribute(VIS_ATTR, value);
     }
+    // 강조: 보이는 카드 가운데 켠 조건에 맞는 것에 색 테두리를 두른다.
+    const highlighted = new Map();
+    for (const item of items) {
+      const key = item.pageWork || marked.get(item.card) === "hide" ? null : cardHighlight(item.statuses, prefs);
+      if (key) highlighted.set(item.card, key);
+    }
+    for (const node of document.querySelectorAll(`[${MARK_ATTR}]`)) {
+      if (!highlighted.has(node)) node.removeAttribute(MARK_ATTR);
+    }
+    for (const [node, key] of highlighted) {
+      if (node.getAttribute(MARK_ATTR) !== key) node.setAttribute(MARK_ATTR, key);
+    }
   }
 
   function decorate() {
@@ -325,6 +348,8 @@
         ...classified,
         ignored: itemIgnored,
         pageWork: isPageWork(book),
+        // RIDI 카드가 별점을 보여 주지 않는 화면(신간 등)에서는 데이터에 있는 별점을 표지에 적는다.
+        ratingChip: parseCardFacts(item.card.textContent).rating == null && Number(book.rating) > 0 ? `★ ${Number(book.rating).toFixed(1)}` : "",
         badges: storeBadges(classified),
         visibility: cardVisibility({ statuses: classified.statuses, book, ignored: itemIgnored }, prefs),
       };
@@ -336,6 +361,7 @@
 
   function clearDecorations() {
     for (const node of document.querySelectorAll(`[${VIS_ATTR}]`)) node.removeAttribute(VIS_ATTR);
+    for (const node of document.querySelectorAll(`[${MARK_ATTR}]`)) node.removeAttribute(MARK_ATTR);
     for (const node of document.querySelectorAll(`.${BADGE_CLASS}`)) node.remove();
     currentItems = [];
   }
@@ -406,6 +432,12 @@
       .only { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:8px 14px; border-top:1px solid var(--line); font-size:12px; }
       .only > span { color:var(--muted); }
       .only button { min-height:28px; border-radius:999px; padding:3px 11px; font-size:12px; }
+      /* 강조 버튼: 카드 테두리와 같은 색 점으로 무엇이 어떤 색인지 알린다. */
+      .marks button::before { content:""; display:inline-block; width:8px; height:8px; margin-right:6px; border-radius:50%; background:var(--mark); vertical-align:1px; }
+      .marks button[aria-pressed="true"] { border-color:var(--mark); background:var(--bg); color:var(--fg); box-shadow:inset 0 0 0 1px var(--mark); }
+      .rating-range { display:inline-flex; align-items:center; gap:6px; font-size:12px; white-space:nowrap; }
+      .rating-range input { width:120px; accent-color:var(--accent-text); }
+      .rating-range output { min-width:72px; color:var(--accent-text); font-weight:700; }
       .panel { display:grid; gap:12px; padding:12px 14px; border-top:1px solid var(--line); background:var(--soft); }
       .panel h3 { margin:0 0 6px; font-size:12px; color:var(--muted); font-weight:700; }
       .fields { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; }
@@ -616,20 +648,26 @@
       segmented("소장", prefs.owned, modes, (value) => setPrefs({ owned: value })),
       segmented("완독", prefs.finished, modes, (value) => setPrefs({ finished: value })),
     );
-    const ratingSelect = el("select");
-    ratingSelect.className = "rating-select";
-    ratingSelect.dataset.focusKey = "rating";
-    ratingSelect.title = "0.1점 단위. 별점이 없는 작품은 거르지 않습니다.";
-    // 0(거르지 않음)과 3.0–5.0 을 0.1점 단위로. 저장된 값이 범위 밖이면 그 값도 넣는다.
-    const steps = [...new Set([0, ...Array.from({ length: 21 }, (_, index) => Math.round((3 + index * 0.1) * 10) / 10), prefs.minRating])].sort((left, right) => left - right);
-    for (const value of steps) {
-      const option = el("option", "", value === 0 ? "전체" : `★ ${value.toFixed(1)} 이상`);
-      option.value = String(value);
-      option.selected = prefs.minRating === value;
-      ratingSelect.append(option);
-    }
-    ratingSelect.addEventListener("change", () => setPrefs({ minRating: ratingSelect.value }));
-    const rating = dropdown("별점", ratingSelect, (value) => Number(value) === 0);
+    // 별점: 0.1점 단위 슬라이더. 끄는 동안 값만 바꾸고, 놓았을 때 화면에 적용한다.
+    const rating = el("label", "rating-range");
+    rating.title = "별점이 없는 작품은 거르지 않습니다";
+    const ratingRange = el("input");
+    ratingRange.type = "range";
+    ratingRange.min = "0";
+    ratingRange.max = "5";
+    ratingRange.step = "0.1";
+    ratingRange.value = String(prefs.minRating);
+    ratingRange.dataset.focusKey = "rating";
+    ratingRange.setAttribute("aria-label", "최소 별점");
+    const ratingOutput = el("output", "", "");
+    const showRating = () => {
+      const value = Number(ratingRange.value);
+      ratingOutput.textContent = value > 0 ? `★ ${value.toFixed(1)} 이상` : "전체";
+    };
+    showRating();
+    ratingRange.addEventListener("input", showRating);
+    ratingRange.addEventListener("change", () => setPrefs({ minRating: ratingRange.value }));
+    rating.append("별점", ratingRange, ratingOutput);
     row.append(
       rating,
       checkbox("성인 숨김", prefs.hideAdult, (value) => setPrefs({ hideAdult: value })),
@@ -649,6 +687,30 @@
     row.append(toggle);
     bar.append(row);
 
+    if (lookup.hasIndex) {
+      const marks = el("div", "only marks");
+      marks.setAttribute("role", "group");
+      marks.setAttribute("aria-label", "강조");
+      marks.append(el("span", "", "강조"));
+      for (const [key, label, color] of HIGHLIGHT_OPTIONS) {
+        const button = el("button", "", label);
+        button.type = "button";
+        button.dataset.mark = key;
+        button.dataset.label = label;
+        button.dataset.focusKey = `mark:${key}`;
+        button.style.setProperty("--mark", color);
+        button.setAttribute("aria-pressed", String(prefs.highlight.includes(key)));
+        button.title = "켜면 이 조건에 맞는 작품에 같은 색 테두리를 두릅니다";
+        button.addEventListener("click", () => {
+          const next = new Set(prefs.highlight);
+          if (next.has(key)) next.delete(key);
+          else next.add(key);
+          setPrefs({ highlight: [...next] });
+        });
+        marks.append(button);
+      }
+      bar.append(marks);
+    }
     // 만화 신작에서는 바로 아래 전체 신간 줄의 필터가 같은 일을 전체 장르에 대해 하므로 겹쳐 두지 않는다.
     if (lookup.hasIndex && page()?.kind !== "releases") {
       const only = el("div", "only");
@@ -706,6 +768,9 @@
     };
     for (const button of shadow.querySelectorAll("[data-only]")) {
       button.textContent = `${button.dataset.label} ${number(counts[button.dataset.only])}`;
+    }
+    for (const button of shadow.querySelectorAll("[data-mark]")) {
+      button.textContent = `${button.dataset.label} ${number(counts[button.dataset.mark])}`;
     }
   }
 
@@ -907,6 +972,7 @@
       .card.dim { opacity:.34; filter:grayscale(.6); }
       .card.dim:hover,.card.dim:focus-within { opacity:1; filter:none; }
       .card.reveal { opacity:.5; outline:1px dashed var(--muted); outline-offset:-1px; }
+      .card.marked { outline:2px solid var(--mark); outline-offset:-2px; border-radius:6px; }
       .cover-link { position:relative; display:block; flex:none; width:var(--cover-w,120px); aspect-ratio:2 / 2.9; overflow:hidden; border-radius:4px; background:var(--soft); border:1px solid rgba(0,0,0,.08); }
       .cover-link img { width:100%; height:100%; object-fit:cover; display:block; }
       .stack { position:absolute; top:6px; left:6px; display:flex; flex-direction:column; align-items:flex-start; gap:3px; max-width:calc(100% - 12px); }
@@ -954,6 +1020,11 @@
   function moreCard(record, decision, classified, host) {
     const itemIgnored = isIgnored(ignored, record);
     const card = el("article", `card${decision.mode === "dim" ? " dim" : ""}${decision.mode === "hide" ? " reveal" : ""}`);
+    const mark = decision.mode === "hide" ? null : cardHighlight(classified.statuses, prefs);
+    if (mark) {
+      card.classList.add("marked");
+      card.style.setProperty("--mark", HIGHLIGHT_OPTIONS.find(([key]) => key === mark)?.[2] ?? "#9333a8");
+    }
     const title = record.seriesTitle || record.title;
     const cover = el("a", "cover-link");
     cover.href = record.storeUrl;
