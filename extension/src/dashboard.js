@@ -1,5 +1,6 @@
 import { READING_STATE_LABELS, readingStateOf } from "./catalog.js";
 import { mergeBibliography, STORE_DEFINITIONS } from "./store-library.js";
+import { matchesSearchQuery, parseSearchQuery, SEARCH_HELP } from "./search-query.js";
 
 const CACHE_KEY = "ridi_analysis";
 const INDEX_KEY = "ridi_page_index";
@@ -144,26 +145,26 @@ function annotationFor(record) {
   return state.annotations[record.key] || state.annotations[`ridi:${record.bId}`] || null;
 }
 
-function searchableValue(record, field) {
+function searchableFields(record) {
   const annotation = annotationFor(record);
-  const values = {
-    title: record.title,
+  return {
+    title: record.title ?? "",
     author: (record.authors ?? []).join(" "),
-    publisher: record.publisher,
+    publisher: record.publisher ?? "",
     memo: `${annotation?.text ?? ""} ${(annotation?.tags ?? []).join(" ")} ${record.noteText ?? ""}`,
   };
-  return field === "all" ? Object.values(values).join(" ") : values[field];
 }
 
 function filteredRows() {
-  const query = normalize($("query").value);
+  // 인라인 목록과 같은 검색 문법: 띄어쓰기 AND, | OR, -제외, "묶음", 작가:이름
+  const query = parseSearchQuery($("query").value);
   const field = $("search-field").value;
   const ownership = $("ownership").value;
   const readingState = $("reading-state").value;
   const source = $("source").value;
   const missingOnly = $("missing-only").checked;
   const rows = rowsForTab().filter((record) => {
-    if (query && !normalize(searchableValue(record, field)).includes(query)) return false;
+    if (!matchesSearchQuery(query, searchableFields(record), field)) return false;
     if (source !== "all" && !(record.sources ?? [record.source]).includes(source)) return false;
     if (ownership !== "all" && record.ownership !== ownership) return false;
     if (readingState !== "all" && record.readingState !== readingState) return false;
@@ -466,6 +467,7 @@ chrome.runtime.onMessage.addListener((message) => {
   if (message.type === "storeLibraryUpdated") void loadStorage();
 });
 
+$("query").title = SEARCH_HELP;
 for (const id of ["query", "search-field", "source", "ownership", "reading-state", "sort", "missing-only"]) {
   $(id).addEventListener(id === "query" ? "input" : "change", renderResults);
 }

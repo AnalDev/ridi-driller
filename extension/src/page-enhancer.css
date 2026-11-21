@@ -1,3 +1,23 @@
-.ridi-driller-badge-anchor {
-  position: relative !important;
+.ridi-driller-badge-anchor { position: relative !important; }
+
+/* 스토어 인핸서: 표지에 마우스를 올렸을 때만 '숨김' 버튼을 보이고 누를 수 있게 한다. */
+a:hover > .ridi-driller-store-badges,
+a:focus-within > .ridi-driller-store-badges {
+  --ridi-driller-hover: 1;
+  --ridi-driller-pointer: auto;
 }
+
+/* 사용자가 고른 표시 방식. 원본 노드는 지우지 않고 속성만 붙였다 뗀다. */
+[data-ridi-driller-vis="hide"] { display: none !important; }
+[data-ridi-driller-vis="dim"] { opacity: 0.3 !important; filter: grayscale(0.7); transition: opacity 0.15s; }
+[data-ridi-driller-vis="dim"]:hover,
+[data-ridi-driller-vis="dim"]:focus-within { opacity: 1 !important; filter: none; }
+[data-ridi-driller-vis="reveal"] { opacity: 0.55 !important; outline: 1px dashed #8c959f; outline-offset: -1px; }
+[data-ridi-driller-vis="reveal"]:hover,
+[data-ridi-driller-vis="reveal"]:focus-within { opacity: 1 !important; }
+
+/* 서재·신간 화면에서 검색·필터를 쓰는 동안: 그 자리에 결과를 그리고 RIDI 원본 목록·쪽 번호는 가린다. */
+[data-ridi-driller-native="hidden"] { display: none !important; }
+
+/* RIDI 목록이 걸러진 결과를 다시 받는 짧은 동안. */
+[data-ridi-driller-busy] { opacity: 0.35 !important; pointer-events: none; transition: opacity 0.1s; }

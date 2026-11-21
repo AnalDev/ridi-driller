@@ -1,20 +1,17 @@
 {
   "manifest_version": 3,
-  "name": "리디 드릴러 — 서재 인핸서",
-  "version": "0.4.0",
-  "description": "RIDI 서재·독서노트와 서점 구매 기록을 로컬 서지로 합치고 RIDI 페이지를 개선합니다.",
+  "name": "북드릴",
+  "version": "0.7.0",
+  "description": "RIDI 서재를 분석해 소장·미구매·읽기 상태와 별점을 RIDI 화면에 표시하고, 서재와 스토어 목록을 검색·필터·정렬합니다.",
   "permissions": ["activeTab", "cookies", "scripting", "storage"],
-  "host_permissions": [
-    "*://ridibooks.com/*",
-    "*://*.ridibooks.com/*"
-  ],
+  "host_permissions": ["*://ridibooks.com/*", "*://*.ridibooks.com/*"],
   "background": {
     "service_worker": "src/background.js",
     "type": "module"
   },
   "action": {
     "default_popup": "src/popup.html",
-    "default_title": "리디 드릴러",
+    "default_title": "북드릴",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
@@ -28,20 +25,21 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["src/page-index.js", "src/page-view.js", "src/reading-notes.js"],
+      "resources": ["src/page-index.js", "src/page-view.js", "src/reading-notes.js", "src/store-data.js", "src/search-query.js", "src/onboarding.js"],
       "matches": ["*://ridibooks.com/*", "*://*.ridibooks.com/*"]
     },
     {
       "resources": ["src/store-capture.js", "src/store-library.js"],
-      "matches": [
-        "https://*.aladin.co.kr/*",
-        "https://*.yes24.com/*",
-        "https://*.kyobobook.co.kr/*",
-        "https://*.ypbooks.co.kr/*"
-      ]
+      "matches": ["https://*.aladin.co.kr/*", "https://*.yes24.com/*", "https://*.kyobobook.co.kr/*", "https://*.ypbooks.co.kr/*"]
     }
   ],
   "content_scripts": [
+    {
+      "matches": ["https://library.ridibooks.com/*", "https://ridibooks.com/library*"],
+      "js": ["src/library-bridge.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
     {
       "matches": [
         "https://library.ridibooks.com/*",
@@ -50,6 +48,20 @@
         "https://ridibooks.com/books/*"
       ],
       "js": ["src/page-enhancer.js"],
+      "css": ["src/page-enhancer.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://ridibooks.com/*"],
+      "exclude_matches": [
+        "https://ridibooks.com/library*",
+        "https://ridibooks.com/account/*",
+        "https://ridibooks.com/order/*",
+        "https://ridibooks.com/payment/*",
+        "https://ridibooks.com/books/*/view*",
+        "https://ridibooks.com/reading-note/*"
+      ],
+      "js": ["src/store-enhancer.js"],
       "css": ["src/page-enhancer.css"],
       "run_at": "document_idle"
     },

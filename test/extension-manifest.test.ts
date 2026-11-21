@@ -5,7 +5,7 @@ interface Manifest {
   version: string;
   permissions: string[];
   host_permissions: string[];
-  content_scripts: { matches: string[]; js: string[] }[];
+  content_scripts: { matches: string[]; exclude_matches?: string[]; js: string[]; css?: string[]; world?: string; run_at?: string }[];
   web_accessible_resources: { resources: string[]; matches: string[] }[];
 }
 
@@ -44,7 +44,34 @@ describe("RIDI extension manifest", () => {
     expect(manifest).not.toHaveProperty("optional_host_permissions");
   });
 
-  it("ships the browser-session release", () => {
-    expect(manifest.version).toBe("0.4.0");
+  it("runs the store enhancer across the RIDI store but not on account, payment, library or reader pages", () => {
+    const store = manifest.content_scripts.find((entry) => entry.js.includes("src/store-enhancer.js"));
+    expect(store?.matches).toEqual(["https://ridibooks.com/*"]);
+    expect(store?.exclude_matches).toEqual(expect.arrayContaining([
+      "https://ridibooks.com/library*",
+      "https://ridibooks.com/account/*",
+      "https://ridibooks.com/order/*",
+      "https://ridibooks.com/payment/*",
+      "https://ridibooks.com/books/*/view*",
+    ]));
+    expect(store?.css).toContain("src/page-enhancer.css");
+    expect(manifest.web_accessible_resources[0]?.resources).toContain("src/store-data.js");
+    // page-view.js 가 불러오는 모듈도 페이지에서 읽을 수 있어야 한다
+    expect(manifest.web_accessible_resources[0]?.resources).toContain("src/search-query.js");
+    expect(manifest.web_accessible_resources[0]?.resources).toContain("src/onboarding.js");
+  });
+
+  it("loads the library bridge in the page world before RIDI's app starts, on library pages only", () => {
+    const bridge = manifest.content_scripts.find((entry) => entry.js.includes("src/library-bridge.js"));
+    expect(bridge).toMatchObject({ world: "MAIN", run_at: "document_start" });
+    expect(bridge?.matches).toEqual(["https://library.ridibooks.com/*", "https://ridibooks.com/library*"]);
+  });
+
+  it("asks for no new permissions for the store enhancer", () => {
+    expect([...manifest.permissions].sort()).toEqual(["activeTab", "cookies", "scripting", "storage"]);
+  });
+
+  it("ships the store-enhancer release", () => {
+    expect(manifest.version).toBe("0.7.0");
   });
 });
