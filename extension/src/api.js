@@ -439,6 +439,28 @@ export const NEW_RELEASE_GENRES = [
   { id: 2200, label: "컴퓨터/IT" },
 ];
 
+/**
+ * 신간 API 의 별점. 별점별 건수 배열([{ rating, count }])로 오므로 RIDI 화면과 같은 가중 평균으로 바꾼다.
+ * (예전 형태의 단일 점수 값도 받아 준다.) 평가가 없으면 값 없음.
+ */
+export function releaseRating(ratings) {
+  if (Array.isArray(ratings)) {
+    let count = 0;
+    let sum = 0;
+    for (const entry of ratings) {
+      const stars = Number(entry?.rating);
+      const votes = Number(entry?.count);
+      if (!Number.isFinite(stars) || !Number.isFinite(votes)) continue;
+      count += votes;
+      sum += stars * votes;
+    }
+    return count > 0 ? { rating: Math.round((sum / count) * 10) / 10, count } : { rating: null, count: null };
+  }
+  const score = Number(ratings?.buyer_rating?.score ?? ratings?.rating ?? 0);
+  const count = Number(ratings?.buyer_rating?.count ?? 0);
+  return { rating: score > 0 ? score : null, count: count > 0 ? count : null };
+}
+
 function releaseRecord(item, genre) {
   const book = item?.book;
   if (!book?.book_id || book.trial) return null;
@@ -465,7 +487,8 @@ function releaseRecord(item, genre) {
     genreIds: [genre.id],
     genreLabels: [genre.label],
     isAdult: Boolean(book.adults_only),
-    rating: Number(book.ratings?.buyer_rating?.score ?? book.ratings?.rating ?? 0) || null,
+    rating: releaseRating(book.ratings).rating,
+    ratingCount: releaseRating(book.ratings).count,
   };
 }
 
