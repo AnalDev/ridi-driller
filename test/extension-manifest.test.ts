@@ -72,6 +72,6 @@ describe("RIDI extension manifest", () => {
   });
 
   it("ships the store-enhancer release", () => {
-    expect(manifest.version).toBe("0.7.1");
+    expect(manifest.version).toBe("0.7.2");
   });
 });
