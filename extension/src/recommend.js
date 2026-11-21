@@ -146,6 +146,19 @@ export function buildRecommendations({ units, meta, lastRead, authorBooks }) {
     }
   }
 
+  // 검색 결과의 분류 → 서지와 같은 유형 이름 (웹 앱의 contentTypeOfSearch 와 같은 규칙).
+  const searchContentType = (b) => {
+    const parent = b.parent_category_name || "";
+    const category = b.category_name || "";
+    if (/잡지|매거진|magazine/iu.test(parent) || /잡지|매거진|magazine/iu.test(category)) return "잡지";
+    if (parent.includes("웹툰")) return "웹툰";
+    if (parent.includes("연재")) return "연재";
+    if (parent.includes("라이트노벨") || parent.includes("라노벨")) return "라이트노벨";
+    if (parent.includes("만화") || parent.includes("코믹")) return "만화";
+    if (parent.includes("로맨스") || parent.includes("판타지") || parent.includes("BL")) return "소설";
+    return parent ? "일반" : "기타";
+  };
+
   // 신호 3: 작가 신작 (보유 시리즈/제목 제외)
   const authorNewMap = new Map();
   for (const [name, books] of authorBooks) {
@@ -162,8 +175,16 @@ export function buildRecommendations({ units, meta, lastRead, authorBooks }) {
         authors: [name],
         cover: coverUrl(b.b_id, "large"),
         reason: `내가 읽은 ${name}의 다른 작품 (내 서재에 ${authorOwnedCount.get(name) ?? 0}권)`,
-        rating: b.buyer_rating_score,
+        rating: Number(b.buyer_rating_score) > 0 ? b.buyer_rating_score : null,
+        ratingCount: Number(b.buyer_rating_count) > 0 ? b.buyer_rating_count : null,
+        ratingStatus: Number(b.buyer_rating_score) > 0 ? "rated" : "none",
         tags: (b.tags_info ?? []).map((t) => t.tag_name),
+        // 구매 목록과 같은 필터(유형·카테고리·성인·완결·잡지)를 쓸 수 있도록 검색 결과의 값을 그대로 싣는다.
+        contentType: searchContentType(b),
+        category: b.category_name || "",
+        isAdult: typeof b.age_limit === "number" ? b.age_limit >= 19 : null,
+        isSeriesComplete: typeof b.is_series_complete === "boolean" ? b.is_series_complete : null,
+        isMagazine: searchContentType(b) === "잡지",
         storeUrl: storeUrl(b.b_id),
         score: (b.buyer_rating_score ?? 0) * 20 + (authorOwnedCount.get(name) ?? 0) * 5,
       });

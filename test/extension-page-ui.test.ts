@@ -96,6 +96,15 @@ describe("RIDI inline page tools", () => {
     expect(source).not.toContain("link.style.fontWeight");
   });
 
+  it("offers a quick rating-only refresh on the new-release list", () => {
+    expect(source).toContain('await send("refreshReleaseRatings")');
+    expect(source).toContain("별점 없음은 최근 60일 안에 나온 것만 다시 확인합니다");
+    const worker = readFileSync(new URL("../extension/src/background.js", import.meta.url), "utf8");
+    expect(worker).toContain("ratingsCheckedAt: Date.now()");
+    // 별점만 고치고 목록 전체의 유효 시간(generatedAt)은 그대로 둔다
+    expect(worker).not.toMatch(/refreshReleaseRatings[\s\S]{0,1200}generatedAt: Date\.now\(\)/u);
+  });
+
   it("uses the same wording, reading-state rule, hide list and highlight on every screen", () => {
     // 읽기 상태: 서재 표지·확장 목록·스토어 표지가 모두 readingBadge() 를 쓴다
     expect(source).toContain("const reading = readingBadge(record);");
@@ -158,7 +167,7 @@ describe("RIDI inline page tools", () => {
   });
 
   it("offers the original app's filters and paging modes", () => {
-    for (const text of ['"유형", "contentType"', '"카테고리", "category"', '"태그", "tag"', '"성인", "adult"', '"완결", "completed"', "잡지 제외", 'range.step = "0.1"', '["more", "더 보기"], ["infinite", "무한 스크롤"]', '["score", "추천순"]', '["rating", "별점순"]']) {
+    for (const text of ['"유형", "contentType"', '"카테고리", "category"', 'multiDropdown("태그"', '"성인", "adult"', '"완결", "completed"', "잡지 제외", 'range.step = "0.1"', '["more", "더 보기"], ["infinite", "무한 스크롤"]', '["score", "추천순"]', '["rating", "별점순"]']) {
       expect(source).toContain(text);
     }
   });

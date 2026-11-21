@@ -11,6 +11,9 @@
     filterIntegratedRows,
     integratedFacets,
     integratedRowsToCsv,
+    RATING_STATUS_LABELS,
+    ratingStatusOf,
+    ratingText,
     matchesStatus,
     paginateIntegratedRows,
   } = await import(chrome.runtime.getURL("src/page-view.js"));
@@ -311,7 +314,8 @@
       genreId: 0,
       contentType: "",
       category: "",
-      tag: "",
+      tags: [],
+      ratingStatus: "",
       adult: "all",
       completed: "all",
       hideMagazine: false,
@@ -342,7 +346,7 @@
   /** 확장 목록이 원본 목록을 대신해야 하는 상태인지. */
   const defaultSort = (kind) => (kind === "releases" ? "newest" : kind === "purchases" ? "purchase" : "default");
   /** 검색·필터·정렬을 모두 처음 상태로. */
-  const resetPatch = (kind) => ({ full: false, query: "", searchField: "all", filters: [], genreId: 0, contentType: "", category: "", tag: "", adult: "all", completed: "all", hideMagazine: false, minRating: 0, sort: defaultSort(kind), sortDir: "desc", page: 1 });
+  const resetPatch = (kind) => ({ full: false, query: "", searchField: "all", filters: [], genreId: 0, contentType: "", category: "", tags: [], ratingStatus: "", adult: "all", completed: "all", hideMagazine: false, minRating: 0, sort: defaultSort(kind), sortDir: "desc", page: 1 });
   /** 서재 화면에서 "구매 작가의 다른 작품" 탭이 켜져 있으면 그 목록을, 아니면 화면 본래의 목록을 보여 준다. */
   const viewKindOf = (kind) => (LIBRARY_KINDS.includes(kind) && location.hash === AUTHOR_HASH ? "authorNew" : kind);
 
@@ -352,7 +356,7 @@
    */
   function isListActive(prefs, kind) {
     return Boolean(prefs.full || prefs.query.trim() || prefs.filters.length > 0 || prefs.contentType || prefs.completed !== "all"
-      || prefs.category || prefs.tag || prefs.adult !== "all" || prefs.hideMagazine
+      || prefs.category || (prefs.tags ?? []).length > 0 || prefs.ratingStatus || prefs.adult !== "all" || prefs.hideMagazine
       || Number(prefs.genreId) > 0 || Number(prefs.minRating) > 0 || prefs.sort !== defaultSort(kind) || prefs.sortDir === "asc");
   }
 
@@ -530,7 +534,7 @@
    */
   function syncBridge(active, filtered, prefs, view) {
     const signature = active
-      ? JSON.stringify([prefs.query.trim(), prefs.searchField, [...prefs.filters].sort(), prefs.contentType, prefs.category, prefs.tag, prefs.adult, prefs.completed, prefs.hideMagazine, prefs.minRating, prefs.sort, prefs.sortDir, view.generatedAt, filtered.length])
+      ? JSON.stringify([prefs.query.trim(), prefs.searchField, [...prefs.filters].sort(), prefs.contentType, prefs.category, [...(prefs.tags ?? [])].sort(), prefs.ratingStatus, prefs.adult, prefs.completed, prefs.hideMagazine, prefs.minRating, prefs.sort, prefs.sortDir, view.generatedAt, filtered.length])
       : "";
     if (bridgeSignature() === signature) return true;
     try {
@@ -627,8 +631,8 @@
       purchase: record.purchaseDate ? `구매 ${formatDate(record.purchaseDate)}` : "",
       newest: record.publishDate ? `출간 ${formatDate(record.publishDate)}` : "",
     };
-    const rating = Number(record.rating) > 0 ? `★ ${Number(record.rating).toFixed(1)}` : "";
-    return [dates[sortKey] || dates.purchase || dates.newest, rating].filter(Boolean).join(" · ");
+    // 별점이 없을 때도 왜 없는지(없음 · 불러오지 못함 · 불러온 적 없음)를 구분해 적는다.
+    return [dates[sortKey] || dates.purchase || dates.newest, ratingText(record)].filter(Boolean).join(" · ");
   }
 
   /** 소장 권수 알약. 다 가진 시리즈는 RIDI 처럼 "총 N권", 일부만 가졌으면 "소장/발매 · 미구매". */
@@ -923,6 +927,62 @@
     return wrapper;
   }
 
+  /**
+   * 여러 개를 고르는 드롭다운. 드롭다운과 같은 모양의 머리(레이블 + 고른 개수)를 누르면 체크 목록이 펼쳐진다.
+   * 네이티브 details·checkbox 라 키보드로 열고 고를 수 있다. 고른 값이 있으면 같은 강조 표시를 쓴다.
+   */
+  function multiDropdown(label, selected, options, onChange) {
+    const chosen = new Set(selected);
+    const box = el("details", "dd multi");
+    box.dataset.active = String(chosen.size > 0);
+    const summary = el("summary");
+    summary.append(el("span", "", label), el("b", "", chosen.size > 0 ? `${chosen.size}개 선택` : "전체"));
+    const menu = el("div", "menu");
+    menu.setAttribute("role", "group");
+    menu.setAttribute("aria-label", `${label} 선택 (고른 것 중 하나라도 있으면 표시)`);
+    const hint = el("div", "menu-hint", "고른 것 중 하나라도 있으면 표시");
+    const clear = el("button", "", "모두 해제");
+    clear.type = "button";
+    clear.disabled = chosen.size === 0;
+    clear.addEventListener("click", () => onChange([]));
+    hint.append(clear);
+    menu.append(hint);
+    for (const [value, text, n] of options) {
+      const row = el("label", "menu-item");
+      const check = document.createElement("input");
+      check.type = "checkbox";
+      check.checked = chosen.has(value);
+      check.addEventListener("change", () => {
+        if (check.checked) chosen.add(value);
+        else chosen.delete(value);
+        // 목록을 닫을 때 한 번에 적용한다 (고를 때마다 다시 그리면 목록이 닫힌다).
+        box.dataset.dirty = "true";
+        box.dataset.active = String(chosen.size > 0);
+        summary.querySelector("b").textContent = chosen.size > 0 ? `${chosen.size}개 선택` : "전체";
+      });
+      row.append(check, el("span", "", text), el("i", "", n.toLocaleString("ko-KR")));
+      menu.append(row);
+    }
+    box.append(summary, menu);
+    const apply = () => {
+      if (box.dataset.dirty === "true") onChange([...chosen]);
+    };
+    box.addEventListener("toggle", () => {
+      if (!box.open) apply();
+    });
+    box.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && box.open) {
+        box.open = false;
+        summary.focus();
+      }
+    });
+    // 바깥을 누르면 닫는다.
+    box.addEventListener("focusout", (event) => {
+      if (box.open && !box.contains(event.relatedTarget)) box.open = false;
+    });
+    return box;
+  }
+
   function integratedStyles() {
     // RIDI 화면의 일부처럼 보이도록 글꼴은 페이지에서 물려받고, 색·선은 RIDI 의 것을 따른다.
     return `
@@ -962,6 +1022,22 @@
       .dd[data-active="true"] { border-color:var(--accent-text); background:var(--accent-soft); }
       .dd[data-active="true"] select { color:var(--accent-text); font-weight:700; }
       .dd[data-disabled="true"] { opacity:.5; cursor:not-allowed; }
+      /* 여러 개 고르는 드롭다운: 머리는 드롭다운과 같고, 아래로 체크 목록이 펼쳐진다. */
+      .dd.multi { position:relative; padding:0; }
+      .dd.multi > summary { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 26px 0 9px; list-style:none; cursor:pointer; font-size:12px; white-space:nowrap; border-radius:4px; background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236b6b6b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 8px center; }
+      .dd.multi > summary::-webkit-details-marker { display:none; }
+      .dd.multi > summary > span { color:var(--muted); font-size:11px; }
+      .dd.multi > summary > b { font-weight:400; color:var(--fg); }
+      .dd.multi[data-active="true"] > summary > b { color:var(--accent-text); font-weight:700; }
+      .dd.multi > summary:focus-visible { outline:2px solid var(--accent-text); outline-offset:1px; }
+      .menu { position:absolute; z-index:30; top:calc(100% + 4px); left:0; width:260px; max-height:320px; overflow:auto; border:1px solid var(--line); border-radius:6px; background:var(--bg); box-shadow:0 8px 24px rgba(0,0,0,.16); padding:4px 0; }
+      .menu-hint { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 10px; color:var(--muted); font-size:11px; border-bottom:1px solid var(--line); }
+      .menu-hint button { min-height:24px; padding:2px 8px; font-size:11px; }
+      .menu-item { display:flex; align-items:center; gap:8px; padding:6px 10px; font-size:12px; cursor:pointer; }
+      .menu-item:hover,.menu-item:focus-within { background:var(--soft); }
+      .menu-item span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .menu-item i { color:var(--muted); font-style:normal; font-size:11px; }
+      .menu-item input { accent-color:var(--accent-text); }
       .dd select:disabled { cursor:not-allowed; }
       button:focus-visible,a:focus-visible,input:focus-visible { outline:2px solid var(--accent-text); outline-offset:1px; }
       .controls { display:flex; flex-wrap:wrap; gap:6px; padding:4px 12px 8px; }
@@ -1093,6 +1169,35 @@
     const sync = el("button", "", ["purchases", "interest", "authorNew"].includes(kind) ? "서재 다시 분석" : "전체 새로고침");
     sync.type = "button";
     sync.addEventListener("click", () => void refreshCatalog(kind, true));
+    if (kind === "releases" && view.rows.length > 0) {
+      // 갓 나온 신간은 별점이 없다가 며칠 뒤에 붙는다. 전체를 다시 받지 않고 별점 없는 작품만 다시 확인한다.
+      const statusCount = { rated: 0, none: 0, failed: 0, unchecked: 0 };
+      for (const record of releaseCatalog?.items ?? []) statusCount[ratingStatusOf(record)] += 1;
+      const pendingCount = statusCount.none + statusCount.failed + statusCount.unchecked;
+      const ratings = el("button", "", "별점 새로고침");
+      ratings.type = "button";
+      ratings.title = `별점 없음 ${statusCount.none.toLocaleString("ko-KR")} · 불러오지 못함 ${statusCount.failed.toLocaleString("ko-KR")} · 불러온 적 없음 ${statusCount.unchecked.toLocaleString("ko-KR")}\n불러오지 못한 것과 불러온 적 없는 것은 모두, 별점 없음은 최근 60일 안에 나온 것만 다시 확인합니다.`;
+      ratings.disabled = pendingCount === 0;
+      ratings.addEventListener("click", async () => {
+        ratings.disabled = true;
+        progressMessage = "별점을 다시 확인하는 중";
+        scheduleRender();
+        const result = await send("refreshReleaseRatings");
+        const n = (value) => Number(value ?? 0).toLocaleString("ko-KR");
+        progressMessage = result?.error
+          ?? (result
+            ? `별점 ${n(result.checked)}권 다시 확인 · 새로 붙음 ${n(result.updated)} · 없음 ${n(result.none)} · 불러오지 못함 ${n(result.failed)} · 불러온 적 없음 ${n(result.unchecked)}`
+            : "별점을 확인하지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
+        await loadStorage();
+        setTimeout(() => {
+          if (/^별점 /u.test(progressMessage)) {
+            progressMessage = "";
+            scheduleRender();
+          }
+        }, 10000);
+      });
+      actions.append(ratings);
+    }
     const dashboard = el("a", "button primary", "서지 관리");
     dashboard.href = "#";
     dashboard.addEventListener("click", (event) => {
@@ -1257,7 +1362,12 @@
       filterRow.append(selectFilter("카테고리", "category", [["", "전체"], ...facets.categories.map((item) => [item.value, `${item.value} ${count(item.count)}`])]));
     }
     if (facets.tags.length > 1) {
-      filterRow.append(selectFilter("태그", "tag", [["", "전체"], ...facets.tags.map((item) => [item.value, `#${item.value} ${count(item.count)}`])]));
+      filterRow.append(multiDropdown("태그", prefs.tags ?? [], facets.tags.map((item) => [item.value, `#${item.value}`, item.count]), (values) => change({ tags: values })));
+    }
+    const statusOptions = Object.entries(facets.ratingStatuses).filter(([, n]) => n > 0);
+    if (statusOptions.length > 1) {
+      // 별점이 없는 이유를 구분해 볼 수 있게 한다: 없음 / 불러오지 못함 / 불러온 적 없음
+      filterRow.append(selectFilter("별점 상태", "ratingStatus", [["", "전체"], ...statusOptions.map(([key, n]) => [key, `${RATING_STATUS_LABELS[key]} ${count(n)}`])]));
     }
     if (facets.adult > 0 && facets.adult < view.rows.length) {
       filterRow.append(selectFilter("성인", "adult", [["all", "전체"], ["only", `성인만 ${count(facets.adult)}`], ["exclude", `성인 제외 ${count(view.rows.length - facets.adult)}`]]));
