@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildIntegratedView,
   filterIntegratedRows,
+  integratedFacets,
+  integratedRowsToCsv,
   paginateIntegratedRows,
+  RATING_STEPS,
 } from "../extension/src/page-view.js";
 
 describe("RIDI integrated page view", () => {
@@ -46,5 +49,145 @@ describe("RIDI integrated page view", () => {
 
     expect(view).toMatchObject({ type: "books", title: "읽을 책", generatedAt: 2 });
     expect(view.rows[0]).toMatchObject({ title: "책장 작품", statuses: ["owned", "unread"] });
+  });
+});
+
+describe("RIDI integrated view filters and export", () => {
+  const rows = [
+    { title: "가", contentType: "만화", isSeriesComplete: true, missingCount: 0, ownedCount: 3, totalCount: 3, authors: ["글", "그림"] },
+    { title: "나", contentType: "소설", isSeriesComplete: false, missingCount: 4, ownedCount: 1, totalCount: 5 },
+    { title: "다", contentType: "만화", missingCount: 2, ownedCount: 9, totalCount: 11 },
+  ];
+  const titles = (options: Record<string, unknown>) => filterIntegratedRows(rows, options).map((row: { title: string }) => row.title);
+
+  it("filters by content type and completion without guessing unknown completion", () => {
+    expect(titles({ contentType: "만화" })).toEqual(["가", "다"]);
+    expect(titles({ completed: "only" })).toEqual(["가"]);
+    expect(titles({ completed: "exclude" })).toEqual(["나"]);
+    expect(titles({ completed: "all" })).toEqual(["가", "나", "다"]);
+  });
+
+  it("sorts by missing and owned volume counts in either direction", () => {
+    expect(titles({ sort: "missing" })).toEqual(["나", "다", "가"]);
+    expect(titles({ sort: "missing", sortDir: "asc" })).toEqual(["가", "다", "나"]);
+    expect(titles({ sort: "owned" })).toEqual(["다", "가", "나"]);
+    // 기본순은 방향을 바꿔도 소스 순서를 유지한다
+    expect(titles({ sort: "default", sortDir: "asc" })).toEqual(["가", "나", "다"]);
+  });
+
+  it("lists only the facet values present in the rows", () => {
+    expect(integratedFacets(rows)).toMatchObject({
+      contentTypes: [{ value: "만화", count: 2 }, { value: "소설", count: 1 }],
+      completed: 1,
+      ongoing: 1,
+    });
+  });
+
+  it("exports CSV that spreadsheets read safely", () => {
+    const csv = integratedRowsToCsv([
+      { title: '=HYPERLINK("x"),위험', authors: ["글", "그림"], isSeriesComplete: true, ownedCount: 3 },
+      { title: "줄\n바꿈", isSeriesComplete: false },
+    ]);
+    const lines = csv.split("\r\n");
+    expect(csv.startsWith("\uFEFF작품명,작가,")).toBe(true);
+    expect(lines[1]).toBe(`"'=HYPERLINK(""x""),위험",글 / 그림,,,,3,,,Y,,,,,,,`);
+    expect(csv).toContain('"줄\n바꿈"');
+    expect(csv).toContain(",N,");
+  });
+});
+
+describe("RIDI release list linking", () => {
+  const pageIndex = {
+    catalog: [{ bId: "10", seriesId: "10", title: "가진 시리즈", authors: ["홍길동"], authorIds: ["7"], ownedCount: 2, totalCount: 3, missingCount: 1 }],
+    owned: [{ bId: "10", title: "가진 시리즈", unitId: "u" }],
+    interest: [],
+    statuses: { newVolume: [], unread: [], finished: [], authorNew: [] },
+  };
+  const release = (bId: string, extra: Record<string, unknown>) => ({ bId, title: `신간 ${bId}`, authors: [], genreIds: [1500], ...extra });
+  const rows = buildIntegratedView({
+    kind: "releases",
+    pageIndex,
+    releaseCatalog: {
+      generatedAt: 1,
+      items: [
+        release("11", { seriesId: "10", title: "표기가 달라진 시리즈명" }),
+        release("20", { seriesId: "20", authorRefs: [{ id: "7", name: "홍길동" }] }),
+        release("30", { seriesId: "30", authorRefs: [{ id: "9", name: "홍길동" }] }),
+        release("40", { seriesId: "40", title: "가진 시리즈" }),
+      ],
+    },
+  }).rows as { bId: string; statuses: string[]; ownership: string }[];
+  const byId = (bId: string) => rows.find((row) => row.bId === bId)!;
+
+  it("recognizes a new volume of an owned series by series id even when the title differs", () => {
+    expect(byId("11")).toMatchObject({ ownership: "owned" });
+    expect(byId("11").statuses).toContain("ownedSeries");
+  });
+
+  it("finds other works of every purchased author by author id, not only the analysis shortlist", () => {
+    expect(filterIntegratedRows(rows, { filters: ["authorNew"] }).map((row: { bId: string }) => row.bId)).toEqual(["20"]);
+    expect(byId("30").statuses).toEqual([]); // 동명이인
+  });
+
+  it("does not count a same-title different series as owned", () => {
+    expect(byId("40")).toMatchObject({ ownership: "unowned", statuses: [] });
+  });
+});
+
+describe("RIDI integrated rating filter", () => {
+  it("offers 0.1-point steps and never drops unrated works", () => {
+    expect(RATING_STEPS.slice(0, 4)).toEqual([0, 3, 3.1, 3.2]);
+    expect(RATING_STEPS.at(-1)).toBe(5);
+    expect(RATING_STEPS).toHaveLength(22);
+    const rows = [{ title: "가", rating: 4.6 }, { title: "나", rating: 4.7 }, { title: "다", rating: null }];
+    expect(filterIntegratedRows(rows, { minRating: 4.7 }).map((row: { title: string }) => row.title)).toEqual(["나", "다"]);
+    expect(filterIntegratedRows(rows, { minRating: 0 })).toHaveLength(3);
+  });
+});
+
+describe("RIDI purchased-authors tab", () => {
+  it("lists the analysis results as unowned works", () => {
+    const view = buildIntegratedView({
+      kind: "authorNew",
+      analysis: { generatedAt: 7, authorNew: [{ bId: "9", title: "다른 작품", authors: ["작가"], rating: 4.6, storeUrl: "https://ridibooks.com/books/9" }] },
+    });
+    expect(view).toMatchObject({ type: "books", generatedAt: 7, title: "구매 작가의 다른 작품" });
+    expect(view.rows).toEqual([expect.objectContaining({ key: "authorNew:9", ownership: "unowned", statuses: ["authorNew"], rating: 4.6 })]);
+    expect(buildIntegratedView({ kind: "authorNew" }).rows).toEqual([]);
+  });
+});
+
+describe("filters restored from the original web app", () => {
+  const rows = [
+    { key: "1", title: "가", category: "판타지", tags: ["이세계", "먼치킨"], isAdult: false, isMagazine: false, rating: 4.8, score: 10 },
+    { key: "2", title: "나", category: "로맨스", tags: ["이세계"], isAdult: true, isMagazine: false, rating: 4.2, score: 30 },
+    { key: "3", title: "다", category: "판타지", tags: [], isAdult: false, isMagazine: true, rating: null, score: 20 },
+    { key: "4", title: "라" },
+  ];
+  const keys = (options: Record<string, unknown>) => filterIntegratedRows(rows, options).map((row: { key: string }) => row.key);
+
+  it("filters by category, tag, adult and magazine without guessing missing values", () => {
+    expect(keys({ category: "판타지" })).toEqual(["1", "3"]);
+    expect(keys({ tag: "이세계" })).toEqual(["1", "2"]);
+    expect(keys({ adult: "only" })).toEqual(["2"]);
+    // 성인 여부를 모르는 작품(4)은 "성인 제외"로 걸러 내지 않는다
+    expect(keys({ adult: "exclude" })).toEqual(["1", "3", "4"]);
+    expect(keys({ hideMagazine: true })).toEqual(["1", "2", "4"]);
+    expect(keys({ minRating: 4.5 })).toEqual(["1", "3", "4"]);
+  });
+
+  it("sorts by rating and recommendation score", () => {
+    expect(keys({ sort: "rating" }).slice(0, 2)).toEqual(["1", "2"]);
+    expect(keys({ sort: "score" }).slice(0, 3)).toEqual(["2", "3", "1"]);
+  });
+
+  it("lists categories, tags and counts for the filter menus", () => {
+    expect(integratedFacets(rows)).toMatchObject({
+      categories: [{ value: "판타지", count: 2 }, { value: "로맨스", count: 1 }],
+      tags: [{ value: "이세계", count: 2 }, { value: "먼치킨", count: 1 }],
+      adult: 1,
+      magazine: 1,
+      rated: 2,
+    });
   });
 });

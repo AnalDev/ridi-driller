@@ -318,6 +318,40 @@ export async function fetchAuthorBooks(name, authorId) {
   }
 }
 
+/** 공개 검색 (제목으로 별점·태그를 찾을 때 쓴다). */
+export async function searchBooks(keyword, size = 10) {
+  try {
+    const res = await publicGet(`${SEARCH_API}/search?keyword=${encodeURIComponent(keyword)}&where=book&what=base&size=${size}`);
+    return res?.books ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 서재 작품의 별점·태그. 책 정보 API 에는 없어서 제목으로 검색한 뒤 시리즈 ID 나 책 ID 가 일치하는 결과만 쓴다.
+ * (일치하는 결과가 없으면 값 없음으로 둔다 — 첫 번째 검색 결과로 대신하지 않는다.)
+ * @returns {Promise<Map<string, { rating: number | null, count: number | null, tags: string[] }>>} 키는 시리즈 ID 또는 책 ID
+ */
+export async function lookupRatings(probes, onProgress) {
+  const out = new Map();
+  await mapLimit(probes, 5, async (probe) => {
+    const books = await searchBooks(probe.title, 10);
+    // 검색 결과에는 시리즈 ID 칸이 없고, 시리즈는 대표 책 ID(= 시리즈 ID)로 나온다.
+    // 그래서 결과의 책 ID 가 이 작품의 시리즈 ID 나 책 ID 와 같은 것만 같은 작품으로 본다.
+    const match = books.find((book) => String(book.b_id) === String(probe.seriesId ?? ""))
+      ?? books.find((book) => String(book.b_id) === String(probe.bId));
+    const rating = Number(match?.buyer_rating_score);
+    const count = Number(match?.buyer_rating_count);
+    out.set(String(probe.seriesId || probe.bId), {
+      rating: match && rating > 0 ? rating : null,
+      count: match && count > 0 ? count : null,
+      tags: match ? (match.tags_info ?? []).map((tag) => tag.tag_name).filter(Boolean) : [],
+    });
+  }, onProgress);
+  return out;
+}
+
 export async function fetchAuthorBooksMany(authors, onProgress) {
   const out = new Map();
   await mapLimit(authors, 4, async (a) => {
@@ -412,11 +446,17 @@ function releaseRecord(item, genre) {
     ["author", "original_author", "comic_author", "story_writer"].includes(author.role),
   );
   const authors = [...new Set((primary.length ? primary : book.authors ?? []).map((author) => author.name).filter(Boolean))];
+  // 서재의 작가·시리즈와 이름이 아닌 ID 로 맞추기 위해 원본 식별자를 함께 남긴다.
+  const authorRefs = (primary.length ? primary : book.authors ?? [])
+    .filter((author) => author.name)
+    .map((author) => ({ id: author.author_id != null ? String(author.author_id) : null, name: author.name }));
   return {
     bId: String(book.book_id),
+    seriesId: book.serial?.serial_id != null ? String(book.serial.serial_id) : null,
     title: String(book.serial?.title || book.title || ""),
     volumeTitle: String(book.title || ""),
     authors,
+    authorRefs,
     publisher: String(book.publisher?.name ?? ""),
     publishDate: book.publication_date || book.registration_date || null,
     cover: book.cover?.large || coverUrl(book.book_id, "large"),

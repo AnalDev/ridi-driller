@@ -27,7 +27,7 @@ describe("extension bibliography catalog", () => {
       ["3", {
         id: "3",
         title: { main: "작품 3권" },
-        authors: [{ name: "작가", role: "author" }],
+        authors: [{ id: 42, name: "작가", role: "author" }, { id: 43, name: "역자", role: "translator" }],
         categories: [{ id: 1527, name: "판타지", ancestor_ids: [1500, 0] }],
         publisher: { name: "출판사" },
         file: { format: "bom", is_comic: true },

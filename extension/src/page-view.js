@@ -1,11 +1,11 @@
-import { classifyPageBook, createPageLookup, normalizeBookTitle } from "./page-index.js";
+import { normalizeBookTitle } from "./page-index.js";
+import { createStoreLookup } from "./store-data.js";
+import { matchesSearchQuery, parseSearchQuery } from "./search-query.js";
 
 export const PAGE_SIZE_OPTIONS = [24, 48, 96];
+/** 별점 드롭다운: 0(거르지 않음)과 3.0–5.0 을 0.1점 단위로. */
+export const RATING_STEPS = [0, ...Array.from({ length: 21 }, (_, index) => Math.round((3 + index * 0.1) * 10) / 10)];
 export const DEFAULT_PAGE_SIZE = 48;
-
-function normalize(value) {
-  return String(value ?? "").normalize("NFKC").toLowerCase().replace(/\s+/gu, "").trim();
-}
 
 function catalogStatuses(record, interestById, interestByTitle) {
   const statuses = new Set(["owned"]);
@@ -66,14 +66,17 @@ function completeInterestRows(pageIndex) {
   });
 }
 
+const RELEASE_STATUS_KEYS = new Set(["owned", "ownedSeries", "newVolume", "unread", "finished", "authorNew", "interest", "interestUpdate"]);
+
 function completeReleaseRows(pageIndex, releaseCatalog) {
-  const lookup = createPageLookup(pageIndex);
+  // 스토어 카드와 같은 연결 규칙을 쓴다: 책 ID → 시리즈 ID → 제목, 작가는 작가 ID 우선.
+  // 그래서 "구매 작가의 다른 작품"은 분석이 미리 검색해 둔 상위 작가만이 아니라 구매한 모든 작가에 걸린다.
+  const lookup = createStoreLookup(pageIndex);
   return (releaseCatalog?.items ?? []).map((record) => {
-    const statuses = classifyPageBook(lookup, {
-      bookId: record.bId,
-      title: record.title,
-      pageKind: "releases",
-    }).map((status) => status.key);
+    const authors = (record.authorRefs ?? (record.authors ?? []).map((name) => ({ id: null, name })))
+      .map((author) => ({ ...author, role: "author" }));
+    const statuses = lookup.classify({ bId: record.bId, seriesId: record.seriesId, title: record.title, authors })
+      .statuses.filter((key) => RELEASE_STATUS_KEYS.has(key));
     const owned = statuses.includes("owned") || statuses.includes("ownedSeries");
     return {
       ...record,
@@ -127,8 +130,8 @@ function completeShelfRows(pageIndex, shelfCatalog, pathname) {
   return { type: "books", rows, generatedAt: detail?.generatedAt ?? null, title: detail?.name || "내 책장" };
 }
 
-/** @param {{ kind: string, pageIndex?: any, releaseCatalog?: any, shelfCatalog?: any, pathname?: string }} options */
-export function buildIntegratedView({ kind, pageIndex = null, releaseCatalog = null, shelfCatalog = null, pathname = "" }) {
+/** @param {{ kind: string, pageIndex?: any, releaseCatalog?: any, shelfCatalog?: any, analysis?: any, pathname?: string }} options */
+export function buildIntegratedView({ kind, pageIndex = null, releaseCatalog = null, shelfCatalog = null, analysis = null, pathname = "" }) {
   if (kind === "purchases") {
     return { type: "books", rows: completeCatalogRows(pageIndex), generatedAt: pageIndex?.generatedAt ?? null, title: "전체 구매 작품" };
   }
@@ -137,6 +140,17 @@ export function buildIntegratedView({ kind, pageIndex = null, releaseCatalog = n
   }
   if (kind === "releases") {
     return { type: "books", rows: completeReleaseRows(pageIndex, releaseCatalog), generatedAt: releaseCatalog?.generatedAt ?? null, title: "전체 신간" };
+  }
+  if (kind === "authorNew") {
+    // 서재 분석이 찾아 둔 "구매 작가의 다른 작품" (보유 시리즈·제목은 분석 단계에서 이미 제외됨).
+    const rows = (analysis?.authorNew ?? []).map((record) => ({
+      ...record,
+      key: `authorNew:${record.bId}`,
+      authors: record.authors ?? [],
+      ownership: "unowned",
+      statuses: ["authorNew"],
+    }));
+    return { type: "books", rows, generatedAt: analysis?.generatedAt ?? null, title: "구매 작가의 다른 작품" };
   }
   if (kind === "shelves") return completeShelfRows(pageIndex, shelfCatalog, pathname);
   return { type: "books", rows: [], generatedAt: null, title: "전체 작품" };
@@ -151,7 +165,7 @@ export function matchesStatus(record, filter) {
 }
 
 export function filterIntegratedRows(rows, options = {}) {
-  const query = normalize(options.query);
+  const query = parseSearchQuery(options.query);
   const field = options.searchField ?? "all";
   const filters = new Set(options.filters ?? []);
   const genreId = Number(options.genreId ?? 0);
@@ -161,17 +175,108 @@ export function filterIntegratedRows(rows, options = {}) {
       author: (record.authors ?? []).join(" "),
       publisher: record.publisher ?? "",
     };
-    const haystack = field === "all" ? Object.values(values).join(" ") : values[field] ?? "";
-    if (query && !normalize(haystack).includes(query)) return false;
+    if (!matchesSearchQuery(query, values, field in values ? field : "all")) return false;
     if (genreId && !(record.genreIds ?? []).includes(genreId)) return false;
+    if (options.contentType && record.contentType !== options.contentType) return false;
+    if (options.category && record.category !== options.category) return false;
+    if (options.tag && !(record.tags ?? []).includes(options.tag)) return false;
+    // 성인·잡지 여부는 책 정보의 값 그대로. 값이 없는 예전 색인의 작품은 어느 쪽으로도 단정하지 않는다.
+    if (options.adult === "only" && record.isAdult !== true) return false;
+    if (options.adult === "exclude" && record.isAdult === true) return false;
+    if (options.hideMagazine && record.isMagazine === true) return false;
+    // 별점이 없는 작품(값 없음)은 별점 조건으로 걸러 내지 않는다.
+    if (Number(options.minRating) > 0 && Number(record.rating) > 0 && Number(record.rating) < Number(options.minRating)) return false;
+    // 완결 여부를 모르는 작품(값 없음)은 "완결만"·"연재 중만" 어느 쪽에도 넣지 않는다.
+    if (options.completed === "only" && record.isSeriesComplete !== true) return false;
+    if (options.completed === "exclude" && record.isSeriesComplete !== false) return false;
     return [...filters].every((filter) => matchesStatus(record, filter));
   });
-  const textSort = (a, b) => String(a.title ?? "").localeCompare(String(b.title ?? ""), "ko");
-  if (options.sort === "title") filtered.sort(textSort);
-  if (options.sort === "newest") filtered.sort((a, b) => (Date.parse(b.publishDate || "") || 0) - (Date.parse(a.publishDate || "") || 0) || textSort(a, b));
-  if (options.sort === "purchase") filtered.sort((a, b) => (Date.parse(b.purchaseDate || "") || 0) - (Date.parse(a.purchaseDate || "") || 0) || textSort(a, b));
-  if (options.sort === "lastRead") filtered.sort((a, b) => (Date.parse(b.lastReadAt || "") || 0) - (Date.parse(a.lastReadAt || "") || 0) || textSort(a, b));
+  // 값이 같은 행의 순서가 쪽을 넘길 때마다 달라지지 않도록 마지막엔 고유 키로 가른다.
+  const textSort = (a, b) => String(a.title ?? "").localeCompare(String(b.title ?? ""), "ko")
+    || String(a.key ?? a.bId ?? "").localeCompare(String(b.key ?? b.bId ?? ""));
+  const byDate = (key) => (a, b) => (Date.parse(b[key] || "") || 0) - (Date.parse(a[key] || "") || 0) || textSort(a, b);
+  const byCount = (key) => (a, b) => Number(b[key] ?? 0) - Number(a[key] ?? 0) || textSort(a, b);
+  const sorter = {
+    title: textSort,
+    newest: byDate("publishDate"),
+    purchase: byDate("purchaseDate"),
+    lastRead: byDate("lastReadAt"),
+    missing: byCount("missingCount"),
+    owned: byCount("ownedCount"),
+    rating: byCount("rating"),
+    score: byCount("score"),
+    lastReadVolume: byCount("lastReadVolume"),
+  }[options.sort];
+  if (sorter) filtered.sort(sorter);
+  // 기본순은 소스 순서를 그대로 둔다. 방향 전환은 정렬 키가 있을 때만 의미가 있다.
+  if (sorter && options.sortDir === "asc") filtered.reverse();
   return filtered;
+}
+
+/** 필터 메뉴에 쓸 값 목록 — 실제로 목록에 있는 값만, 많은 순으로. */
+export function integratedFacets(rows) {
+  const contentTypes = new Map();
+  const categories = new Map();
+  const tags = new Map();
+  let completed = 0;
+  let ongoing = 0;
+  let adult = 0;
+  let magazine = 0;
+  let rated = 0;
+  for (const record of rows) {
+    if (record.contentType) contentTypes.set(record.contentType, (contentTypes.get(record.contentType) ?? 0) + 1);
+    if (record.category) categories.set(record.category, (categories.get(record.category) ?? 0) + 1);
+    for (const tag of record.tags ?? []) tags.set(tag, (tags.get(tag) ?? 0) + 1);
+    if (record.isAdult === true) adult += 1;
+    if (record.isMagazine === true) magazine += 1;
+    if (Number(record.rating) > 0) rated += 1;
+    if (record.isSeriesComplete === true) completed += 1;
+    else if (record.isSeriesComplete === false) ongoing += 1;
+  }
+  const ranked = (map, limit) => [...map.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ko")).slice(0, limit).map(([value, count]) => ({ value, count }));
+  return {
+    contentTypes: ranked(contentTypes, 20),
+    categories: ranked(categories, 60),
+    tags: ranked(tags, 80),
+    completed,
+    ongoing,
+    adult,
+    magazine,
+    rated,
+  };
+}
+
+const CSV_COLUMNS = [
+  ["title", "작품명"],
+  ["authors", "작가"],
+  ["publisher", "출판사"],
+  ["contentType", "유형"],
+  ["category", "카테고리"],
+  ["ownedCount", "소장 권수"],
+  ["totalCount", "발매 권수"],
+  ["missingCount", "미구매 권수"],
+  ["isSeriesComplete", "완결"],
+  ["readingState", "독서 상태"],
+  ["lastReadVolume", "마지막 열람 권"],
+  ["lastReadAt", "마지막 열람"],
+  ["purchaseDate", "구매일"],
+  ["publishDate", "출간일"],
+  ["statuses", "상태"],
+  ["storeUrl", "RIDI 주소"],
+];
+
+function csvCell(value) {
+  let cell = Array.isArray(value) ? value.join(" / ") : value == null ? "" : typeof value === "boolean" ? (value ? "Y" : "N") : String(value);
+  // 스프레드시트가 수식으로 해석하지 않도록 선행 기호를 무력화한다.
+  if (/^[=+\-@\t\r]/u.test(cell)) cell = `'${cell}`;
+  return /[",\n\r]/u.test(cell) ? `"${cell.replace(/"/gu, '""')}"` : cell;
+}
+
+/** 현재 조건의 목록을 CSV 로. Excel 이 한글을 읽도록 BOM 을 붙인다. */
+export function integratedRowsToCsv(rows) {
+  const lines = [CSV_COLUMNS.map(([, label]) => csvCell(label)).join(",")];
+  for (const record of rows) lines.push(CSV_COLUMNS.map(([key]) => csvCell(record[key])).join(","));
+  return `\uFEFF${lines.join("\r\n")}\r\n`;
 }
 
 export function paginateIntegratedRows(rows, requestedPage = 1, requestedPageSize = DEFAULT_PAGE_SIZE) {

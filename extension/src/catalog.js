@@ -6,6 +6,13 @@ function primaryAuthors(meta) {
   return [...new Set((primary.length ? primary : authors).map((author) => author.name).filter(Boolean))];
 }
 
+/** 대표 작가의 RIDI 작가 ID. 스토어 카드의 작가와 이름이 아닌 ID 로 맞추기 위해 색인에 남긴다. */
+function primaryAuthorIds(meta) {
+  const authors = meta?.authors ?? [];
+  const primary = authors.filter((author) => PRIMARY_AUTHOR_ROLES.has(author.role));
+  return [...new Set((primary.length ? primary : authors).map((author) => author.id).filter((id) => id != null).map(String))];
+}
+
 function availableCount(meta, ownedCount) {
   const paid = meta?.series?.price_info?.buy?.total_book_count;
   if (typeof paid === "number") return paid;
@@ -38,7 +45,10 @@ export function readingStateOf({ lastRead, representativeBookId, missingCount, i
   return isSeriesComplete ? "finished" : "caughtUp";
 }
 
-export function buildCatalog({ units, meta, lastRead }) {
+/**
+ * @param {{ units: any[], meta: Map<string, any>, lastRead: Map<string, any>, ratings?: Map<string, any> | null }} input
+ */
+export function buildCatalog({ units, meta, lastRead, ratings = null }) {
   const records = [];
   for (const unit of units) {
     const book = meta.get(unit.b_id);
@@ -50,6 +60,8 @@ export function buildCatalog({ units, meta, lastRead }) {
     const recent = series?.id ? lastRead.get(series.id) ?? null : null;
     const recentMeta = recent?.bookId ? meta.get(recent.bookId) : null;
     const isSeriesComplete = Boolean(series?.property?.is_completed ?? book.property?.is_completed);
+    // 저장해 둔 별점·태그를 시리즈 ID(없으면 책 ID)로 합친다.
+    const rated = ratings?.get(String(series?.id ?? "")) ?? ratings?.get(String(unit.b_id)) ?? null;
 
     records.push({
       key: `ridi:${unit.unit_id}`,
@@ -61,6 +73,7 @@ export function buildCatalog({ units, meta, lastRead }) {
       seriesId: series?.id ? String(series.id) : null,
       title: String(series?.property?.title || book.title?.main || unit.unit_title || ""),
       authors: primaryAuthors(book),
+      authorIds: primaryAuthorIds(book),
       publisher: book.publisher?.name ?? "",
       cover: `https://img.ridicdn.net/cover/${unit.b_id}/large`,
       storeUrl: `https://ridibooks.com/books/${unit.b_id}`,
@@ -77,6 +90,11 @@ export function buildCatalog({ units, meta, lastRead }) {
       totalCount,
       missingCount,
       isSeriesComplete,
+      isAdult: Boolean(book.property?.is_adult_only),
+      isMagazine: Boolean(book.property?.is_magazine),
+      rating: rated?.rating ?? null,
+      ratingCount: rated?.count ?? null,
+      tags: rated?.tags ?? [],
       readingState: readingStateOf({
         lastRead: recent,
         representativeBookId: unit.b_id,

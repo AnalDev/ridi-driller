@@ -13,6 +13,7 @@ import {
   fetchInterestBooks,
   fetchLastReadMany,
   getSession,
+  lookupRatings,
   NEW_RELEASE_GENRES,
 } from "./api.js";
 import { buildRecommendations } from "./recommend.js";
@@ -20,6 +21,7 @@ import { buildPageIndex } from "./page-index.js";
 import { buildCatalog } from "./catalog.js";
 import { mergeReadingNotes } from "./reading-notes.js";
 import { mergeCapturedStoreRecords } from "./store-library.js";
+import { normalizeStoreBook } from "./store-data.js";
 
 const CACHE_KEY = "ridi_analysis";
 const PAGE_INDEX_KEY = "ridi_page_index";
@@ -27,14 +29,40 @@ const READING_NOTES_KEY = "ridi_reading_notes";
 const STORE_LIBRARY_KEY = "bookstore_libraries";
 const RELEASE_CATALOG_KEY = "ridi_release_catalog";
 const SHELF_CATALOG_KEY = "ridi_shelf_catalog";
+const LIBRARY_UNITS_KEY = "ridi_library_units";
+const RATINGS_KEY = "ridi_ratings";
+// 별점을 못 찾은 작품은 이 기간이 지나야 다시 찾는다. 찾은 값은 다음 분석에서도 그대로 쓴다.
+const RATING_RETRY_MS = 14 * 24 * 60 * 60 * 1000;
 const CATALOG_TTL_MS = 30 * 60 * 1000;
 let running = false;
 let releaseSyncPromise = null;
 const shelfSyncPromises = new Map();
 
-/** 진행률을 팝업·컨텐츠로 방송 (수신자 없으면 조용히 무시). */
+const RIDI_TAB_URLS = ["*://ridibooks.com/*", "*://*.ridibooks.com/*"];
+let lastProgress = null;
+let lastTabProgressAt = 0;
+
+/**
+ * 진행률을 팝업·서지 관리 화면과 RIDI 탭에 알린다 (수신자가 없으면 조용히 무시).
+ * runtime.sendMessage 는 확장 자신의 화면에만 가므로, RIDI 페이지의 컨텐츠 스크립트에는 탭별로 따로 보낸다.
+ */
 function broadcast(msg) {
   chrome.runtime.sendMessage(msg).catch(() => {});
+  if (msg.type === "progress") {
+    lastProgress = msg;
+    // 건수마다 오는 진척 메시지를 탭마다 다 보내지 않는다. 0.2초에 한 번, 그리고 단계의 시작·끝은 항상 보낸다.
+    const now = Date.now();
+    const edge = !msg.done || msg.done === msg.total;
+    if (!edge && now - lastTabProgressAt < 200) return;
+    lastTabProgressAt = now;
+  } else if (msg.type === "done" || msg.type === "error") {
+    lastProgress = null;
+  }
+  chrome.tabs.query({ url: RIDI_TAB_URLS })
+    .then((tabs) => {
+      for (const tab of tabs) if (tab.id != null) chrome.tabs.sendMessage(tab.id, msg).catch(() => {});
+    })
+    .catch(() => {});
 }
 
 async function analyze({ withAuthors = true } = {}) {
@@ -96,8 +124,32 @@ async function analyze({ withAuthors = true } = {}) {
       );
     }
 
+    // 별점·태그: 저장해 둔 값에 없는 작품만 새로 찾아 합친다 (원래 웹 앱의 ratings 단계와 같은 방식).
+    const storedRatings = (await chrome.storage.local.get(RATINGS_KEY))[RATINGS_KEY] ?? {};
+    const probes = new Map();
+    for (const u of units) {
+      const book = meta.get(u.b_id);
+      if (!book || book.property?.is_trial) continue;
+      const key = String(book.series?.id ?? u.b_id);
+      const known = storedRatings[key];
+      if (known && (known.rating != null || started - Number(known.at ?? 0) < RATING_RETRY_MS)) continue;
+      if (!probes.has(key)) {
+        probes.set(key, { bId: String(u.b_id), seriesId: book.series?.id ? String(book.series.id) : null, title: String(book.series?.property?.title || book.title?.main || u.unit_title || "") });
+      }
+    }
+    const ratingProbes = [...probes.values()].filter((probe) => probe.title);
+    broadcast({ type: "progress", phase: "ratings", message: "별점·태그 확인 중…", done: 0, total: ratingProbes.length });
+    if (ratingProbes.length > 0) {
+      const found = await lookupRatings(ratingProbes, (done, total) =>
+        broadcast({ type: "progress", phase: "ratings", message: `별점 ${done}/${total}`, done, total }),
+      );
+      for (const [key, value] of found) storedRatings[key] = { ...value, at: started };
+      await chrome.storage.local.set({ [RATINGS_KEY]: storedRatings });
+    }
+    const ratings = new Map(Object.entries(storedRatings));
+
     const recs = buildRecommendations({ units, meta, lastRead, authorBooks });
-    const catalog = buildCatalog({ units, meta, lastRead });
+    const catalog = buildCatalog({ units, meta, lastRead, ratings });
     const generatedAt = Date.now();
     let interestBooks = [];
     let interestAvailable = true;
@@ -125,7 +177,8 @@ async function analyze({ withAuthors = true } = {}) {
       ...recs,
     };
     const pageIndex = buildPageIndex({ units, recommendations: recs, interestBooks, catalog, generatedAt });
-    await chrome.storage.local.set({ [CACHE_KEY]: result, [PAGE_INDEX_KEY]: pageIndex });
+    // 원본 목록 항목도 그대로 남긴다. 서재 화면의 필터가 RIDI 목록 응답을 이 항목들로 다시 짠다.
+    await chrome.storage.local.set({ [CACHE_KEY]: result, [PAGE_INDEX_KEY]: pageIndex, [LIBRARY_UNITS_KEY]: units });
     broadcast({ type: "done", result });
     return { result };
   } catch (err) {
@@ -205,6 +258,11 @@ async function syncShelfCatalog({ uuid = null, force = false } = {}) {
   return shelfSyncPromises.get(syncKey);
 }
 
+// 처음 설치하면 RIDI 서재를 열어 준다. 거기서 서재 분석 안내 모달이 뜬다.
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason === "install") void chrome.tabs.create({ url: "https://ridibooks.com/library/books" });
+});
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     switch (msg?.cmd) {
@@ -259,8 +317,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         sendResponse({ ok: true, count });
         break;
       }
+      case "resolveBooks": {
+        // 스토어 카드의 책 ID 를 공개 book-api 로 조회해 시리즈·성인 여부를 연결한다 (요청당 최대 100권).
+        const ids = [...new Set((Array.isArray(msg.ids) ? msg.ids : []).map(String).filter((id) => /^\d+$/u.test(id)))].slice(0, 100);
+        const meta = ids.length > 0 ? await fetchBooksMeta(ids) : new Map();
+        sendResponse([...meta.values()].map(normalizeStoreBook).filter(Boolean));
+        break;
+      }
       case "running":
-        sendResponse({ running });
+        // 분석 도중에 열린 화면이 바로 이어서 진척률을 보여 줄 수 있게 마지막 상태를 함께 준다.
+        sendResponse({ running, progress: running ? lastProgress : null });
         break;
       default:
         sendResponse({ error: "알 수 없는 명령" });

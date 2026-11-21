@@ -150,7 +150,8 @@ export function buildRecommendations({ units, meta, lastRead, authorBooks }) {
   const authorNewMap = new Map();
   for (const [name, books] of authorBooks) {
     for (const b of books) {
-      if (b.series_id && ownedSeriesIds.has(b.series_id)) continue;
+      // 검색 결과의 시리즈는 대표 책 ID 가 곧 시리즈 ID 다.
+      if (ownedSeriesIds.has(b.series_id ?? b.b_id)) continue;
       if (ownedTitles.has(normTitle(b.title))) continue;
       const key = b.series_id || b.b_id;
       if (authorNewMap.has(key)) continue;
